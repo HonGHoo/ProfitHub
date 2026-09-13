@@ -28,23 +28,6 @@ export const privateRoutes: RouteRecordRaw[] = [
     ]
   },
   {
-    path: "/",
-    component: Layouts,
-    redirect: "/warehouse",
-    children: [
-      {
-        path: "warehouse",
-        component: () => import("@/pages/warehouse/index.vue"),
-        name: "Warehouse",
-        meta: {
-          title: t("仓库"),
-          svgIcon: "dashboard",
-          affix: false
-        }
-      }
-    ]
-  },
-  {
     path: "/alchemy-tools",
     component: Layouts,
     redirect: "/manualchemy",

@@ -512,7 +512,12 @@ async function onClipboardImport() {
     }
 
     if (!text || !text.trim()) {
-      ElMessageBox.alert("<p>检测到未安装数据导出脚本。</p><p style=\"margin-top:8px\">📥 <a href=\"https://home.greasyfork.org.cn/zh-hans/info#/zh-CN/scripts/587094/detail\" target=\"_blank\">安装脚本</a></p><p style=\"margin-top:8px;color:#909399\">安装后刷新 MilkyWay Idle 页面，再回利润网点「一键导入」。</p>", t("未安装脚本"), { dangerouslyUseHTMLString: true, confirmButtonText: t("知道了") })
+      ElMessageBox.alert("<p>检测到未安装数据导出脚本。</p><p style=\"margin-top:8px\">📥 <a href=\"https://greasyfork.org/zh-CN/scripts/587094\" target=\"_blank\">安装脚本</a>（已装请更新到 3.1.1+）</p><p style=\"margin-top:8px;color:#909399\">安装后刷新 MilkyWay Idle 页面进一次游戏，再回利润网点「一键导入」。</p>", t("未安装脚本"), { dangerouslyUseHTMLString: true, confirmButtonText: t("知道了") })
+      return
+    }
+    // 剪贴板兜底可能读到任意文本（网址/普通文字），先挡掉再进 JSON 解析，避免误导性的"导入失败"
+    if (!text.trim().startsWith("{")) {
+      ElMessageBox.alert("<p>剪贴板内容不是导出数据，且插件桥接未写入数据。</p><p style=\"margin-top:8px;color:#909399\">请确认插件为 3.1.1+，并刷新游戏页进一次游戏后再试「一键导入」。</p>", t("未获取到导出数据"), { dangerouslyUseHTMLString: true, confirmButtonText: t("知道了") })
       return
     }
     const data = JSON.parse(text.trim())
