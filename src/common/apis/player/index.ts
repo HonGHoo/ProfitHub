@@ -243,6 +243,14 @@ function initBuffMap() {
 /**
  * 以传入配置构建 buff 表（纯函数，不依赖当前激活预设）
  */
+/** 实时社区Buff等级（realtime.json 顺带下发）；无数据返回 undefined */
+function liveCommunityBuffLevelOf(hrid?: string): number | undefined {
+  if (!hrid) return undefined
+  const live = useGameStoreOutside().communityBuffsLive
+  const lv = live?.buffs?.[hrid]
+  return typeof lv === "number" && lv >= 0 ? lv : undefined
+}
+
 export function buildBuffMap(config: ActionConfig): BuffMap {
   if (!getGameDataApi()) return {} as BuffMap
   const buffs = {} as BuffMap
@@ -262,27 +270,30 @@ export function buildBuffMap(config: ActionConfig): BuffMap {
   // 社区buff
   for (const communityBuff of COMMUNITY_BUFF_LIST) {
     const cb = config.communityBuffMap.get(communityBuff) ?? defaultPlayerConfig.communityBuffMap.get(communityBuff)!
-    if (cb && cb.hrid && cb.level) {
-      const detail = getCommunityBuffDetailOf(cb.hrid!)
-      const buff = detail.buff
-      for (const actionType in detail.usableInActionTypeMap) {
-        const action = getKeyOf(actionType) as Action
-        if (buff.typeHrid === "/buff_types/action_speed") {
-          buffs[`${action}Speed`] = (buffs[`${action}Speed`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (cb.level - 1))
-        }
-        if (buff.typeHrid === "/buff_types/wisdom") {
-          buffs[`${action}Experience`] = (buffs[`${action}Experience`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (cb.level - 1))
-        }
-        if (buff.typeHrid === "/buff_types/moo_card") {
-          // moo_card 是 Moo Pass 订阅开关型奖励，开启时所有动作经验 +5%
-          buffs[`${action}Experience`] = (buffs[`${action}Experience`] || 0) + 0.05
-        }
-        if (buff.typeHrid === "/buff_types/gathering") {
-          buffs[`${action}Gathering`] = (buffs[`${action}Gathering`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (cb.level - 1))
-        }
-        if (buff.typeHrid === "/buff_types/efficiency") {
-          buffs[`${action}Efficiency`] = (buffs[`${action}Efficiency`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (cb.level - 1))
-        }
+    if (!cb || !cb.hrid) continue
+    // 预设开启「实时社区Buff」且拉到最新数据 → 等级用实时值（全服共享，最后上报者胜）
+    const liveLevel = config.liveCommunityBuff ? liveCommunityBuffLevelOf(cb.hrid) : undefined
+    const level = liveLevel !== undefined ? liveLevel : cb.level
+    if (!level) continue
+    const detail = getCommunityBuffDetailOf(cb.hrid!)
+    const buff = detail.buff
+    for (const actionType in detail.usableInActionTypeMap) {
+      const action = getKeyOf(actionType) as Action
+      if (buff.typeHrid === "/buff_types/action_speed") {
+        buffs[`${action}Speed`] = (buffs[`${action}Speed`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (level - 1))
+      }
+      if (buff.typeHrid === "/buff_types/wisdom") {
+        buffs[`${action}Experience`] = (buffs[`${action}Experience`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (level - 1))
+      }
+      if (buff.typeHrid === "/buff_types/moo_card") {
+        // moo_card 是 Moo Pass 订阅开关型奖励，开启时所有动作经验 +5%
+        buffs[`${action}Experience`] = (buffs[`${action}Experience`] || 0) + 0.05
+      }
+      if (buff.typeHrid === "/buff_types/gathering") {
+        buffs[`${action}Gathering`] = (buffs[`${action}Gathering`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (level - 1))
+      }
+      if (buff.typeHrid === "/buff_types/efficiency") {
+        buffs[`${action}Efficiency`] = (buffs[`${action}Efficiency`] || 0) + (buff.flatBoost + buff.flatBoostLevelBonus * (level - 1))
       }
     }
   }

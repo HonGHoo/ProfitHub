@@ -30,7 +30,7 @@ const showCompareSelector = ref(false)
 const comparePresets = ref<number[]>([0, 1])
 const compareDataSets = ref<Record<string, Calculator>[]>([])
 const compareNames = ref<string[]>([])
-const COMPARE_TYPES = ['primary', 'warning', 'success', 'danger', 'info'] as const
+const COMPARE_TYPES = ["primary", "warning", "success", "danger", "info"] as const
 const compareIdxA = ref(0)
 let _compareResolve: (() => void) | null = null
 const compareSelectorRef = ref<HTMLElement>()
@@ -38,16 +38,16 @@ const compareSelectorRef = ref<HTMLElement>()
 function onCompareSelectorClickOutside(e: MouseEvent) {
   if (compareSelectorRef.value && !compareSelectorRef.value.contains(e.target as Node)) {
     const target = e.target as HTMLElement
-    if (target.closest('.el-popper') || target.closest('.el-dropdown-menu')) return
+    if (target.closest(".el-popper") || target.closest(".el-dropdown-menu")) return
     if (showCompareSelector.value) showCompareSelector.value = false
   }
 }
 
 watch(showCompareSelector, (val) => {
   if (val) {
-    setTimeout(() => document.addEventListener('click', onCompareSelectorClickOutside), 0)
+    setTimeout(() => document.addEventListener("click", onCompareSelectorClickOutside), 0)
   } else {
-    document.removeEventListener('click', onCompareSelectorClickOutside)
+    document.removeEventListener("click", onCompareSelectorClickOutside)
   }
 })
 
@@ -124,20 +124,20 @@ function removeCompareSlot(index: number) {
 function startNCompare() {
   const ps = usePlayerStore()
   if (comparePresets.value.length < 2) {
-    ElMessage.warning(t('请选择至少2个预设进行对比'))
+    ElMessage.warning(t("请选择至少2个预设进行对比"))
     return
   }
-  
-  compareNames.value = comparePresets.value.map(i => ps.presets[i]?.name || '预设' + i)
+
+  compareNames.value = comparePresets.value.map(i => ps.presets[i]?.name || `预设${i}`)
   compareIdxA.value = ps.presetIndex
   compareDataSets.value = []
-  
+
   const unique = [...new Set(comparePresets.value)]
   let currentIdx = 0
-  
+
   function captureNext() {
     if (currentIdx >= unique.length) {
-      const expanded = comparePresets.value.map(pidx => {
+      const expanded = comparePresets.value.map((pidx) => {
         const idx = unique.indexOf(pidx)
         return compareDataSets.value[idx >= 0 ? idx : 0]
       })
@@ -147,10 +147,10 @@ function startNCompare() {
       usePlayerStore().switchTo(compareIdxA.value)
       return
     }
-    
+
     const pidx = unique[currentIdx]
     currentIdx++
-    
+
     if (pidx === usePlayerStore().presetIndex) {
       const map: Record<string, Calculator> = {}
       for (const item of leaderboardData.value) map[item.key] = item
@@ -161,7 +161,7 @@ function startNCompare() {
       usePlayerStore().switchTo(pidx)
     }
   }
-  
+
   captureNext()
 }
 
@@ -185,7 +185,7 @@ function exitCompare() {
 
 const displayLeaderboardData = computed(() => {
   if (!isComparing.value || compareDataSets.value.length === 0) return leaderboardData.value
-  return leaderboardData.value.map(row => {
+  return leaderboardData.value.map((row) => {
     const dataSets = compareDataSets.value
     const result: any = { ...row, _compareData: [] as (Calculator | null)[] }
     for (const ds of dataSets) {
@@ -229,7 +229,7 @@ const onPriceStatusChange = usePriceStatus("inherit-price-status")
     <div class="game-info">
       <GameInfo />
       <div>
-        <ActionConfig :actions="['cheesesmithing', 'crafting', 'tailoring']" :equipments="['off_hand', 'hands', 'neck', 'earrings', 'ring', 'pouch']" @toggleCompare="!isComparing && (showCompareSelector = !showCompareSelector)" />
+        <ActionConfig :show-compare="true" :actions="['cheesesmithing', 'crafting', 'tailoring']" :equipments="['off_hand', 'hands', 'neck', 'earrings', 'ring', 'pouch']" @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
       </div>
 
       <PriceStatusSelect @change="onPriceStatusChange" />
@@ -263,45 +263,52 @@ const onPriceStatusChange = usePriceStatus("inherit-price-status")
               </el-form-item>
             </el-form>
           </template>
-          <template #default>            <!-- N-way 对比选择器 -->
-          <div
-            v-if="showCompareSelector || isComparing"
-            ref="compareSelectorRef"
-            style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px 16px;border:1px solid var(--el-border-color);border-radius:4px"
-          >
-            <template v-for="(pidx, si) in comparePresets" :key="si">
-              <span v-if="si > 0" style="font-weight:bold;color:var(--el-text-color-secondary)">vs</span>
-              <el-dropdown trigger="click" @command="(i: number) => comparePresets[si] = i">
-                <el-button size="small" :type="COMPARE_TYPES[si % 5]" plain style="min-width:80px;text-align:center">
-                  {{ usePlayerStore().presets[pidx]?.name || '预设' + pidx }}
-                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item
-                      v-for="(p, i) in usePlayerStore().presets"
-                      :key="i"
-                      :command="i"
-                      :class="{ 'is-active': pidx === i }"
-                    >
-                      {{ p.name || '预设' + i }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-              <el-button
-                v-if="comparePresets.length > 2"
-                size="small"
-                :icon="Close"
-                circle
-                @click.stop="removeCompareSlot(si)"
-                style="margin-left:-4px"
-              />
-            </template>
-            <el-button size="small" :icon="Plus" circle @click.stop="addCompareSlot" />
-            <el-button size="small" type="primary" @click.stop="startNCompare()">{{ t("开始对比") }}</el-button>
-            <el-button size="small" plain @click.stop="exitCompare(); showCompareSelector = false" style="margin-left:auto">{{ t("退出对比") }}</el-button>
-          </div>
+          <template #default>
+            <!-- N-way 对比选择器 -->
+            <div
+              v-if="showCompareSelector || isComparing"
+              ref="compareSelectorRef"
+              style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px 16px;border:1px solid var(--el-border-color);border-radius:4px"
+            >
+              <template v-for="(pidx, si) in comparePresets" :key="si">
+                <span v-if="si > 0" style="font-weight:bold;color:var(--el-text-color-secondary)">vs</span>
+                <el-dropdown trigger="click" @command="(i: number) => comparePresets[si] = i">
+                  <el-button size="small" :type="COMPARE_TYPES[si % 5]" plain style="min-width:80px;text-align:center">
+                    {{ usePlayerStore().presets[pidx]?.name || `预设${pidx}` }}
+                    <el-icon class="el-icon--right">
+                      <ArrowDown />
+                    </el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        v-for="(p, i) in usePlayerStore().presets"
+                        :key="i"
+                        :command="i"
+                        :class="{ 'is-active': pidx === i }"
+                      >
+                        {{ p.name || `预设${i}` }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+                <el-button
+                  v-if="comparePresets.length > 2"
+                  size="small"
+                  :icon="Close"
+                  circle
+                  @click.stop="removeCompareSlot(si)"
+                  style="margin-left:-4px"
+                />
+              </template>
+              <el-button size="small" :icon="Plus" circle @click.stop="addCompareSlot" />
+              <el-button size="small" type="primary" @click.stop="startNCompare()">
+                {{ t("开始对比") }}
+              </el-button>
+              <el-button size="small" plain @click.stop="exitCompare(); showCompareSelector = false" style="margin-left:auto">
+                {{ t("退出对比") }}
+              </el-button>
+            </div>
             <el-table :data="displayLeaderboardData" v-loading="loadingLD" @sort-change="handleSortLD">
               <el-table-column width="54">
                 <template #default="{ row }">
@@ -332,7 +339,7 @@ const onPriceStatusChange = usePriceStatus("inherit-price-status")
                       <template v-for="(cd, ci) in row._compareData" :key="ci">
                         <span v-if="cd">
                           <span v-if="ci > 0"> / </span>
-                          <span :style="{color: ['#409eff','#e6a23c','#16ab1b','#f56c6c','#909399'][ci % 5]}">{{ cd.result.profitPHFormat }}</span>
+                          <span :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitPHFormat }}</span>
                         </span>
                       </template>
                     </template>
@@ -416,14 +423,14 @@ const onPriceStatusChange = usePriceStatus("inherit-price-status")
                 <template #default="{ row }">
                   <div style="display: flex; justify-content: center; align-items: center; gap: 5px">
                     <template v-if="isComparing && row._compareData?.length">
-                        <template v-for="(cd, ci) in row._compareData" :key="ci">
-                          <span v-if="cd">
-                            <span v-if="ci > 0"> / </span>
-                            <span :style="{color: ['#409eff','#e6a23c','#16ab1b','#f56c6c','#909399'][ci % 5]}">{{ cd.result.expPHFormat }}</span>
-                          </span>
-                        </template>
+                      <template v-for="(cd, ci) in row._compareData" :key="ci">
+                        <span v-if="cd">
+                          <span v-if="ci > 0"> / </span>
+                          <span :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.expPHFormat }}</span>
+                        </span>
                       </template>
-                      <span v-else>{{ row.result.expPHFormat }}</span>
+                    </template>
+                    <span v-else>{{ row.result.expPHFormat }}</span>
                     <el-tooltip v-if="row.expList?.length > 1" placement="top" effect="light">
                       <template #content>
                         <div v-for="(item, i) in row.expList" :key="i" style="display: flex; gap:10px">

@@ -6,6 +6,81 @@ const { locale } = useI18n()
 
 <template>
   <div class="changelog-page">
+    <!-- ================== v2.8.0 ================== -->
+    <details open>
+      <summary style="cursor:pointer;font-weight:bold;font-size:18px;margin:16px 0 8px">
+        v2.8.0 — 2026-09-12
+      </summary>
+      <div style="padding-left:16px">
+        <template v-if="locale !== 'en'">
+          <p><strong>一、装备优化页大更新（本次主推）</strong></p>
+          <ol>
+            <li>「选择基准」：每个专业可从候选清单自选基准项目，替代固定的「利润前 N」；默认基准项目数 3 → 5。</li>
+            <li>基准候选扩充：锻造/制造/裁缝的候选加入全部基础材料（奶酪、木板、布料、皮革）；炼金按转化/分解/点金三种玩法分别提供候选，同一物品可按不同玩法分别勾选。</li>
+            <li>逐项目对比：展开任意建议行，查看每个基准项目换装前（橙）/换装后（绿）的利润或经验变化。</li>
+            <li>卖旧装抵扣（默认开）：回本按净支出 = 购买成本 − 现装卖价计算，成本列标注「卖旧装 −X」。</li>
+          </ol>
+          <p><strong>二、首页「对比」回归</strong></p>
+          <ol>
+            <li>恢复多预设对比（v2.7.0 曾移除）：选 2~5 个预设，利润排行的利润/天、利润/h、利润率、经验/h 按颜色并排显示。</li>
+            <li>经验/h 列新增点击排序。</li>
+          </ol>
+          <p><strong>三、贤者之石「买材料自制」</strong></p>
+          <ol>
+            <li>新开关：勾选后来源一律按「买材料自己做」的材料成本计价并重排排行榜（无制造配方的仍按市场买价）；买价列划线显示市场价对照。</li>
+          </ol>
+          <p><strong>四、社区Buff实时化（配合插件 3.1.0）</strong></p>
+          <ol>
+            <li>预设社区Buff卡片新增「实时社区Buff」开关：等级取自全服玩家实时上报（约 1 分钟刷新），无数据自动回退游戏快照。</li>
+          </ol>
+          <p><strong>五、强化计算：目标等级快捷按钮</strong></p>
+          <ol>
+            <li>目标框旁新增 3 个方形快捷按钮（默认 10/12/14，点击直接切换目标等级）；齿轮可自定义数值（1-20，本地记忆）。</li>
+          </ol>
+          <p><strong>六、修复</strong></p>
+          <ol>
+            <li>稀有发现勾选失效五处（制造/炼金/火车/收藏/手动炼金）。</li>
+            <li>一键导入装备档位：以实际穿戴为准；未穿且未拥有的特殊槽不再落入默认装备；主手/双手位生活工具正确导出（需插件 3.1.0）。</li>
+            <li>打野页分类筛选选「强化」查无结果的问题。</li>
+            <li>强化页：成品卖价显著偏离市场常见区间时给出提示。</li>
+          </ol>
+        </template>
+        <template v-else>
+          <p><strong>1. Gear Optimizer Overhaul (Highlight)</strong></p>
+          <ol>
+            <li>Baseline picker: choose your own baseline projects per skill (replaces fixed top-N); default N 3 → 5.</li>
+            <li>More candidates: all base materials (cheese / planks / cloth / leather) for the three crafting skills; alchemy candidates per playstyle (transmute / decompose / coinify).</li>
+            <li>Per-project compare: expand any suggestion to see before (orange) / after (green) profit or exp for every baseline project.</li>
+            <li>Sell-off deduction (on by default): payback = cost − old gear sell price.</li>
+          </ol>
+          <p><strong>2. Homepage Compare Is Back</strong></p>
+          <ol>
+            <li>N-way preset compare restored; exp/h column now sortable.</li>
+          </ol>
+          <p><strong>3. Philosopher's Stone: Craft From Materials</strong></p>
+          <ol>
+            <li>New toggle prices every source at material cost and re-ranks the leaderboard; market ask shown struck-through.</li>
+          </ol>
+          <p><strong>4. Live Community Buffs (plugin 3.1.0)</strong></p>
+          <ol>
+            <li>Optional live community buff levels (~1 min refresh), falls back to snapshot when unavailable.</li>
+          </ol>
+          <p><strong>5. Enhancer: quick target buttons</strong></p>
+          <ol>
+            <li>Three square quick buttons next to the target input (default 10/12/14); gear to customize (1-20, remembered).</li>
+          </ol>
+          <p><strong>6. Fixes</strong></p>
+          <ol>
+            <li>Rare-find toggle ignored in five spots (manufacture/alchemy/train/collections/manual alchemy).</li>
+            <li>Imported gear tiers now follow actually-worn items; empty special slots no longer leak default gear; main-hand/two-hand life tools exported (plugin 3.1.0).</li>
+            <li>Jungle category filter "Enhance" returned empty.</li>
+            <li>Enhancer warns when sell price strays far from the common market range.</li>
+          </ol>
+        </template>
+      </div>
+    </details>
+
+    <hr>
     <!-- ================== v2.7.0 ================== -->
     <details open>
       <summary style="cursor:pointer;font-weight:bold;font-size:18px;margin:16px 0 8px">

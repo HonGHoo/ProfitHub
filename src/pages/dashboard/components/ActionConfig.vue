@@ -4,7 +4,7 @@ import type { AchievementTier, Action, CommunityBuff, Equipment, ItemDetail } fr
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import { Plus } from "@element-plus/icons-vue"
 import { ElMessageBox } from "element-plus"
-import { h } from "vue"
+import { computed, h } from "vue"
 import { getAchievementTierDetailOf, getCommunityBuffDetailOf, getPersonalBuffDetailOf } from "@/common/apis/game"
 import { getEquipmentListOf, getSealList, getSpecialEquipmentListOf, getTeaListOf, getToolListOf, setActionConfigApi } from "@/common/apis/player"
 import { useTheme } from "@/common/composables/useTheme"
@@ -20,7 +20,7 @@ defineProps<{
   equipments?: Equipment[]
   communityBuffs?: CommunityBuff[]
   achievementBuffs?: AchievementTier[]
-  /** 是否显示"对比"按钮（首页已移除对比功能，其他工具页保留） */
+  /** 是否显示"对比"按钮：默认隐藏，首页与带对比 UI 的工具页显式传 true（避免 Boolean 缺省转换歧义） */
   showCompare?: boolean
 }>()
 const emit = defineEmits<{
@@ -56,6 +56,7 @@ const visible = ref(false)
 const actionList = ref<ActionConfigItem[]>([])
 const specialList = ref<PlayerEquipmentItem[]>([])
 const communityBuffList = ref<CommunityBuffItem[]>([])
+const liveCommunityBuff = ref(false)
 const achievementBuffList = ref<AchievementBuffItem[]>([])
 const shrineList = ref<ShrineBuffItem[]>([])
 const sealList = ref<ReturnType<typeof getSealList>>([])
@@ -92,6 +93,8 @@ function onDialog(config: ActionConfig, index: number) {
       ...toRaw(config.communityBuffMap.get(buff.type) ?? defaultConfig.communityBuffMap.get(buff.type)!)
     }
   }))
+  liveCommunityBuff.value = config.liveCommunityBuff ?? false
+  if (liveCommunityBuff.value) syncCommunityBuffsFromLive()
 
   achievementBuffList.value = structuredClone(DEFAULT_ACHIEVEMENT_BUFF_LIST.map((buff) => {
     return {
@@ -128,6 +131,23 @@ function onSelect(config: ActionConfig, index: number) {
   }
 }
 
+// 实时社区Buff：显示层同步（计算层在 buildBuffMap 里按 liveCommunityBuff 取实时值）
+function syncCommunityBuffsFromLive() {
+  const live = gameStore.communityBuffsLive
+  if (!live?.buffs) return
+  for (const row of communityBuffList.value) {
+    if (row.hrid && typeof live.buffs[row.hrid] === "number") row.level = live.buffs[row.hrid]
+  }
+}
+function onLiveBuffToggle(value: string | number | boolean) {
+  if (value) syncCommunityBuffsFromLive()
+}
+const liveBuffsHint = computed(() => {
+  const live = gameStore.communityBuffsLive
+  if (!live || !Object.keys(live.buffs || {}).length) return t("实时数据未就绪")
+  return t("最新 {0}", [new Date(live.ts).toLocaleTimeString()])
+})
+
 function onAdd() {
   const index = playerStore.presets.length
   onDialog(defaultActionConfig(t("{0}新预设", [index]), "#90ee90"), index)
@@ -135,6 +155,7 @@ function onAdd() {
 
 function constructActionConfig() {
   const config = {
+    liveCommunityBuff: liveCommunityBuff.value,
     actionConfigMap: new Map<Action, ActionConfigItem>(),
     specialEquimentMap: new Map<Equipment, PlayerEquipmentItem>(),
     communityBuffMap: new Map<CommunityBuff, CommunityBuffItem>(),
@@ -390,6 +411,7 @@ function onImport() {
         name: obj.name,
         color: obj.color,
         seals: normalizeSeals(obj.seals || obj.seal),
+        liveCommunityBuff: Boolean(obj.liveCommunityBuff),
         actionConfigMap: new Map<Action, ActionConfigItem>(Object.entries(obj.actionConfigMap) as [Action, ActionConfigItem][]),
         specialEquimentMap: new Map<Equipment, PlayerEquipmentItem>(Object.entries(obj.specialEquimentMap) as [Equipment, PlayerEquipmentItem][]),
         communityBuffMap: new Map<CommunityBuff, CommunityBuffItem>(Object.entries(obj.communityBuffMap) as [CommunityBuff, CommunityBuffItem][]),
@@ -413,6 +435,7 @@ function onExport() {
     name: config.name,
     color: config.color,
     seals: config.seals,
+    liveCommunityBuff: config.liveCommunityBuff,
     actionConfigMap: Object.fromEntries(config.actionConfigMap.entries()),
     specialEquimentMap: Object.fromEntries(config.specialEquimentMap.entries()),
     communityBuffMap: Object.fromEntries(config.communityBuffMap.entries()),
@@ -614,6 +637,12 @@ function processImportData(jsonStr: string, shouldMerge: boolean, mergeTargetInd
         if (loc) equipMap[loc] = { itemHrid: e.hrid || "", enhancementLevel: e.enhanceLevel || 0 }
       }
 
+      // 实际穿戴清单（真实强化等级），工具/特殊装备赋值时穿戴优先，背包存货只补空位
+      const wornList: { itemHrid: string, enhancementLevel: number }[] = []
+      for (const eq of Object.values(data.equipment || {}) as any[]) {
+        if (eq?.hrid) wornList.push({ itemHrid: eq.hrid, enhancementLevel: eq.enhanceLevel || 0 })
+      }
+
       // 从仓库库存自动填入装备
       const inventoryMap = (data.inventoryMap || {}) as Record<string, number>
       const hasIv = Object.keys(inventoryMap).length > 0
@@ -624,17 +653,27 @@ function processImportData(jsonStr: string, shouldMerge: boolean, mergeTargetInd
         owned.sort((a, b) => (inventoryMap[b.hrid] || 0) - (inventoryMap[a.hrid] || 0) || b.itemLevel - a.itemLevel)
         return owned[0]
       }
-      if (hasIv) {
-        // 工具：按 action 扫描仓库取最佳
+      if (wornList.length || hasIv) {
+        // 工具：身上穿的该专业技能工具优先（真实等级），没穿才从仓库取最佳
         for (const action of ACTION_LIST) {
           const toolKey = `${action}_tool`
-          const best = pickBest(getToolListOf(action))
-          if (best) equipMap[toolKey] = { itemHrid: best.hrid, enhancementLevel: inventoryMap[best.hrid] || 0 }
+          const wornTool = wornList.find(w => getToolListOf(action).some(t => t.hrid === w.itemHrid))
+          if (wornTool) {
+            equipMap[toolKey] = { itemHrid: wornTool.itemHrid, enhancementLevel: wornTool.enhancementLevel }
+          } else {
+            const best = pickBest(getToolListOf(action))
+            if (best) equipMap[toolKey] = { itemHrid: best.hrid, enhancementLevel: inventoryMap[best.hrid] || 0 }
+          }
         }
-        // 特殊装备：仓库取最佳
+        // 特殊装备：身上穿的优先（真实等级），没穿才从仓库取最佳
         for (const se of DEFAULT_SEPCIAL_EQUIPMENT_LIST) {
-          const best = pickBest(getSpecialEquipmentListOf(se.type))
-          if (best) equipMap[se.type] = { itemHrid: best.hrid, enhancementLevel: inventoryMap[best.hrid] || 0 }
+          const wornSe = wornList.find(w => getSpecialEquipmentListOf(se.type).some(t => t.hrid === w.itemHrid))
+          if (wornSe) {
+            equipMap[se.type] = { itemHrid: wornSe.itemHrid, enhancementLevel: wornSe.enhancementLevel }
+          } else {
+            const best = pickBest(getSpecialEquipmentListOf(se.type))
+            if (best) equipMap[se.type] = { itemHrid: best.hrid, enhancementLevel: inventoryMap[best.hrid] || 0 }
+          }
         }
       }
 
@@ -963,6 +1002,9 @@ function processImportData(jsonStr: string, shouldMerge: boolean, mergeTargetInd
           hrid: ed.itemHrid,
           enhanceLevel: ed.enhancementLevel
         })
+      } else if (!useDefaults) {
+        // 实数据导入：没穿戴也没存货的槽位置空，不落默认预设（如副手 eye_watch 10级）
+        specialEquipMap.set(equipType, { type: equipType, hrid: "", enhanceLevel: undefined })
       }
     }
 
@@ -1148,7 +1190,7 @@ function getAchievementEffect(type: AchievementTier) {
       >
         {{ t("一键导入") }}
       </el-button>
-      <template v-if="showCompare !== false">
+      <template v-if="showCompare === true">
         <span style="width:1px;height:20px;background:var(--el-border-color);margin:0 4px" />
         <el-button
           class="compare-trigger-btn" size="small" plain style="padding:0 10px"
@@ -1378,8 +1420,19 @@ function getAchievementEffect(type: AchievementTier) {
 
       <el-card class="mt-5">
         <template #header>
-          <div style="line-height: 32px;">
-            {{ t('社区Buff') }}
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span style="line-height: 32px;">
+              {{ t('社区Buff') }}
+            </span>
+            <div class="flex items-center gap-2">
+              <span class="font-size-12px color-gray-500">{{ liveBuffsHint }}</span>
+              <el-switch
+                v-model="liveCommunityBuff"
+                size="small"
+                :active-text="t('实时社区Buff')"
+                @change="onLiveBuffToggle"
+              />
+            </div>
           </div>
         </template>
         <div class="buff-tofu-grid">

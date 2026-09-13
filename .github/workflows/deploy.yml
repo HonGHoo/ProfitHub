@@ -34,11 +34,14 @@ jobs:
 
       # GitHub Pages (Project Pages) 通常部署在 /<repo>/ 子路径下。
       # 这里根据仓库名自动设置 Vite base 与 router history，避免资源 404 导致白屏。
+      # 绑定自定义域名（public/CNAME 存在）时站点在根路径，base 必须是 /
       - name: Set GitHub Pages env
         shell: bash
         run: |
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          if [[ "$REPO_NAME" == *.github.io ]]; then
+          if [ -f public/CNAME ]; then
+            echo "VITE_PUBLIC_PATH=/" >> "$GITHUB_ENV"
+          elif [[ "$REPO_NAME" == *.github.io ]]; then
             echo "VITE_PUBLIC_PATH=/" >> "$GITHUB_ENV"
           else
             echo "VITE_PUBLIC_PATH=/$REPO_NAME/" >> "$GITHUB_ENV"

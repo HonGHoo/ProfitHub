@@ -4,7 +4,7 @@ import ItemIcon from "@@/components/ItemIcon/index.vue"
 import TieredPriceInput from "@@/components/TieredPriceInput/index.vue"
 
 import * as Format from "@@/utils/format"
-import { Star, StarFilled } from "@element-plus/icons-vue"
+import { Setting, Star, StarFilled } from "@element-plus/icons-vue"
 import { ElTable } from "element-plus"
 import { useRoute } from "vue-router"
 import { EnhanceCalculator } from "@/calculator/enhance"
@@ -27,6 +27,14 @@ const enhancerStore = useEnhancerStore()
 const gameStore = useGameStore()
 const { t } = useI18n()
 const route = useRoute()
+
+// 目标等级快捷按钮：3 个可配置数值（齿轮弹窗改，本地记忆）
+const quickTargets = useMemory("enhancer-quick-targets", [10, 12, 14])
+const quickTargetsDraft = ref<number[]>([...quickTargets.value])
+function applyQuickTargets() {
+  const valid = quickTargetsDraft.value.map(Number).filter(v => Number.isFinite(v) && v >= 1 && v <= 20)
+  if (valid.length) quickTargets.value = valid
+}
 
 function getQueryFirstString(value: unknown): string | undefined {
   if (typeof value === "string") return value
@@ -847,6 +855,49 @@ function stepPriceN(base: number, high: boolean): number {
   return next > 0 ? next : -1
 }
 
+/** 成品当前市场的原始挂单价（ASK/BID 恒等换算，即未经左/右价状态处理），用作区间参照 */
+const productMarketPrice = computed(() => {
+  const item = currentItem.value
+  if (!item?.hrid) {
+    return null
+  }
+  const level = enhancerStore.enhanceLevel ?? defaultConfig.enhanceLevel
+  return getPriceOf(item.hrid, level, PriceStatus.ASK, PriceStatus.BID)
+})
+
+/** 与利润计算同口径的有效卖价：手填价优先，否则按全局卖出状态换算 */
+const effectiveProductSellPrice = computed(() => {
+  const item = currentItem.value
+  const manual = item?.productPrice
+  if (typeof manual === "number" && manual > 0) {
+    return manual
+  }
+  if (!item?.hrid) {
+    return -1
+  }
+  const level = enhancerStore.enhanceLevel ?? defaultConfig.enhanceLevel
+  return getPriceOf(item.hrid, level).bid
+})
+
+/** 卖价超出当前市场挂单区间（最高买单价 ~ 最低卖单价）时提示，防止利润虚高 */
+const productPriceHint = computed<{ type: "warning" | "info", text: string } | null>(() => {
+  const market = productMarketPrice.value
+  if (!market) {
+    return null
+  }
+  const price = effectiveProductSellPrice.value
+  if (market.ask > 0 && price > market.ask) {
+    return { type: "warning", text: t("卖价已高于当前最低卖单价，需市价上行才可能成交，利润可能虚高") }
+  }
+  if (market.bid > 0 && price < market.bid) {
+    return { type: "warning", text: t("卖价已低于当前最高买单价，直接卖给买单更划算") }
+  }
+  if (price > 0 && market.ask <= 0) {
+    return { type: "info", text: t("该等级当前无卖单挂价，卖价缺少市场参照") }
+  }
+  return null
+})
+
 function onGearIngredientPriceChange(row: Ingredient, value: number | undefined, oldValue: number | undefined) {
   if (_syncingGearIngredientPriceStep || row.hrid === COIN_HRID) return
   const next = resolveTierStep(value, oldValue, row.originPrice)
@@ -1497,7 +1548,19 @@ watch(menuVisible, (value) => {
                 />
               </div>
             </el-tab-pane>
-            <el-tab-pane :label="t('成品售价')">
+            <el-tab-pane>
+              <template #label>
+                <span style="display: inline-flex; align-items: center; gap: 4px">
+                  {{ t('成品售价') }}
+                  <el-tooltip
+                    v-if="productPriceHint && productPriceHint.type === 'warning'"
+                    :content="productPriceHint.text"
+                    placement="top"
+                  >
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background: #e6a23c; display: inline-block" />
+                  </el-tooltip>
+                </span>
+              </template>
               <div
                 class="grid w-full items-center gap-x-1"
                 :style="{ gridTemplateColumns: '44px minmax(0, 1fr)' }"
@@ -1521,6 +1584,25 @@ watch(menuVisible, (value) => {
                 <el-checkbox v-model="stepperTimes5" size="small">
                   {{ t('步进×5') }}
                 </el-checkbox>
+              </div>
+              <div
+                v-if="currentItem?.hrid"
+                class="mt-2 font-size-12px"
+                style="color: #909399; line-height: 20px"
+              >
+                <div>
+                  {{ t('当前市场区间') }}：{{
+                    productMarketPrice && productMarketPrice.bid > 0 ? Format.money(productMarketPrice.bid) : t('无买单')
+                  }}
+                  ~
+                  {{ productMarketPrice && productMarketPrice.ask > 0 ? Format.money(productMarketPrice.ask) : t('无卖单') }}
+                </div>
+                <div
+                  v-if="productPriceHint"
+                  :style="{ color: productPriceHint.type === 'warning' ? '#e6a23c' : '#909399' }"
+                >
+                  {{ productPriceHint.text }}
+                </div>
               </div>
 
               <div
@@ -1634,16 +1716,52 @@ watch(menuVisible, (value) => {
               </template>
             </el-table-column>
             <el-table-column />
-            <el-table-column min-width="120" align="center">
+            <el-table-column min-width="260" align="center">
               <template #default>
-                <el-input-number
-                  class="max-w-100%"
-                  :max="20"
-                  :min="1"
-                  v-model="enhancerStore.config.enhanceLevel"
-                  :placeholder="Format.number(defaultConfig.enhanceLevel)"
-                  controls-position="right"
-                />
+                <div class="flex items-center justify-center gap-1">
+                  <el-input-number
+                    class="max-w-100%"
+                    style="width: 88px"
+                    :max="20"
+                    :min="1"
+                    v-model="enhancerStore.config.enhanceLevel"
+                    :placeholder="Format.number(defaultConfig.enhanceLevel)"
+                    controls-position="right"
+                  />
+                  <el-button
+                    v-for="(v, i) in quickTargets"
+                    :key="i"
+                    size="small"
+                    plain
+                    class="quick-target-btn"
+                    :class="{ 'is-active': enhancerStore.config.enhanceLevel === v }"
+                    @click="enhancerStore.config.enhanceLevel = v"
+                  >
+                    {{ v }}
+                  </el-button>
+                  <el-popover placement="bottom" :width="230" trigger="click" @show="quickTargetsDraft = [...quickTargets]">
+                    <template #reference>
+                      <el-button size="small" text class="quick-target-btn">
+                        <el-icon><Setting /></el-icon>
+                      </el-button>
+                    </template>
+                    <div class="flex items-center gap-1">
+                      <el-input-number
+                        v-for="(v, i) in quickTargetsDraft"
+                        :key="i"
+                        v-model="quickTargetsDraft[i]!"
+                        :min="1"
+                        :max="20"
+                        size="small"
+                        style="width: 56px"
+                        controls-position="right"
+                      />
+                      <el-button size="small" type="primary" @click="applyQuickTargets()">
+                        {{ t("确定") }}
+                      </el-button>
+                    </div>
+                  </el-popover>
+                </div>
               </template>
             </el-table-column>
           </ElTable>
@@ -1852,5 +1970,15 @@ watch(menuVisible, (value) => {
       background-color: var(--v3-tagsview-contextmenu-hover-bg-color);
     }
   }
+}
+
+.quick-target-btn {
+  width: 28px;
+  padding: 0;
+}
+
+.quick-target-btn.is-active {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
 }
 </style>

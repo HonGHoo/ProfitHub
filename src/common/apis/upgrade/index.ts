@@ -34,12 +34,18 @@ export interface UpgradeCandidate {
   valueRate: number
   /** 回本小时 = 成本 / 平均Δ利润（经验口径无意义） */
   paybackHours: number
+  /** 现装售卖价（卖价侧口径，无买单价为 0），开售卖抵扣时回本按净支出计 */
+  oldSellPrice?: number
+  /** 逐项目换装前后数值（行展开详情用） */
+  projects?: { hrid: string, name: string, profitBefore: number, profitAfter: number, expBefore: number, expAfter: number }[]
 }
 
 export interface BaselineItem {
   hrid: string
   name: string
   profitPH: number
+  /** 炼金候选项的玩法（转化/分解/点金），同一物品可按不同玩法分别选为基准 */
+  kind?: CalcKind
 }
 
 export interface ActionUpgradeResult {
@@ -49,6 +55,10 @@ export interface ActionUpgradeResult {
   baselines: BaselineItem[]
   /** N 个基准项目的平均利润/时 */
   baselineProfitPH: number
+  /** N 个基准项目的平均经验/时（护符口径的"换装前"基数） */
+  baselineExpPH: number
+  /** 基准项目候选列表（三制造=利润前12∪全部基础材料；炼金=三种玩法各前8），供玩家自选基准 */
+  baselineOptions: BaselineItem[]
   /** 每部位现装 */
   current: Partial<Record<UpgradeSlot, { hrid: string, name: string, level: number }>>
   /** 每部位性价比最高的建议（无提升则缺） */
@@ -71,6 +81,10 @@ export interface UpgradeCompareParams {
   evalMode: EvalMode
   /** 基准项目数（该专业利润最高的前 N 个物品取平均），默认 3 */
   topN?: number
+  /** 玩家自选基准项目：key = `${presetIndex}-${action}` → 项目 hrid 列表；缺省走 topN 自动取 */
+  baselineOverrides?: Record<string, string[]>
+  /** 回本计入卖旧装抵扣：净支出 = 购买成本 − 现装售卖价，默认 false */
+  sellOff?: boolean
   onProgress?: (label: string, current: number, total: number) => void
 }
 
@@ -157,12 +171,13 @@ interface BaselineProject {
   expPH: number
 }
 
-/** 找该专业利润最高的前 N 个项目（按物品去重，同物品取最优做法）。必须在对应预设上下文中调用 */
-function findTopProjects(action: Action, topN: number): BaselineProject[] {
+/** 找该专业按利润降序的全部项目（按物品去重，同物品取最优做法）；炼金同时按玩法分表。必须在对应预设上下文中调用 */
+function findTopProjects(action: Action): { all: BaselineProject[], perKind: BaselineProject[][] } {
   const def = ACTION_DEFS.find(d => d.action === action)!
   const playerLevel = getPlayerLevelOf(action)
   const catalystRanks = action === "alchemy" ? [0, 1, 2] : [0]
   const bestByHrid = new Map<string, BaselineProject>()
+  const bestByHridKind = new Map<string, BaselineProject>()
   for (const item of Object.values(getGameDataApi().itemDetailMap)) {
     for (const kind of def.kinds) {
       for (const catalystRank of catalystRanks) {
@@ -173,9 +188,15 @@ function findTopProjects(action: Action, topN: number): BaselineProject[] {
           cal.run()
           const profitPH = cal.result?.profitPH
           if (typeof profitPH !== "number" || profitPH <= 0) continue
+          const proj = { kind, hrid: item.hrid, catalystRank, profitPH, expPH: cal.result.expPH }
           const prev = bestByHrid.get(item.hrid)
           if (!prev || profitPH > prev.profitPH) {
-            bestByHrid.set(item.hrid, { kind, hrid: item.hrid, catalystRank, profitPH, expPH: cal.result.expPH })
+            bestByHrid.set(item.hrid, proj)
+          }
+          const kindKey = `${item.hrid}#${kind}`
+          const prevKind = bestByHridKind.get(kindKey)
+          if (!prevKind || profitPH > prevKind.profitPH) {
+            bestByHridKind.set(kindKey, proj)
           }
         } catch {
           // 单条计算失败不影响整体
@@ -183,7 +204,28 @@ function findTopProjects(action: Action, topN: number): BaselineProject[] {
       }
     }
   }
-  return [...bestByHrid.values()].sort((a, b) => b.profitPH - a.profitPH).slice(0, Math.max(1, topN))
+  const byProfit = (a: BaselineProject, b: BaselineProject) => b.profitPH - a.profitPH
+  return {
+    all: [...bestByHrid.values()].sort(byProfit),
+    perKind: def.kinds.map(kind => [...bestByHridKind.values()].filter(p => p.kind === kind).sort(byProfit))
+  }
+}
+
+/** 三制造的基础材料：同专业配方图中既是产物又是其它配方原料的资源类物品（锻造=奶酪、制造=木板、裁缝=布料/皮革）；装备升级链为 equipment 类自动排除 */
+function getBaseMaterialHridsOf(action: Action): Set<string> {
+  const prefix = `/actions/${action}/`
+  const inputs = new Set<string>()
+  const outputs = new Set<string>()
+  for (const detail of Object.values(getGameDataApi().actionDetailMap)) {
+    if (!detail.hrid.startsWith(prefix)) continue
+    for (const input of detail.inputItems) inputs.add(input.itemHrid)
+    for (const output of detail.outputItems) outputs.add(output.itemHrid)
+  }
+  const hrids = new Set<string>()
+  for (const hrid of outputs) {
+    if (inputs.has(hrid) && getItemDetailOf(hrid).categoryHrid === "/item_categories/resource") hrids.add(hrid)
+  }
+  return hrids
 }
 
 function runBaselineCalc(kind: CalcKind, hrid: string, action: Action, catalystRank: number): { profitPH: number, expPH: number } | null {
@@ -198,18 +240,20 @@ function runBaselineCalc(kind: CalcKind, hrid: string, action: Action, catalystR
   }
 }
 
-/** 在传入（已换装）配置下计算 N 个基准项目的平均 Δ利润/时 与 Δ经验/时（一次上下文切换内完成 N 次计算） */
-function evaluateOn(config: ActionConfig, action: Action, baselines: BaselineProject[]): { profitDelta: number, expDelta: number } | null {
+/** 在传入（已换装）配置下计算 N 个基准项目的平均 Δ利润/时 与 Δ经验/时（一次上下文切换内完成 N 次计算），并带出逐项目换装前后数值 */
+function evaluateOn(config: ActionConfig, action: Action, baselines: BaselineProject[]): { profitDelta: number, expDelta: number, projects: { hrid: string, profitBefore: number, profitAfter: number, expBefore: number, expAfter: number }[] } | null {
   return runWithPlayerContext(config, () => {
     let profitSum = 0
     let expSum = 0
+    const projects: { hrid: string, profitBefore: number, profitAfter: number, expBefore: number, expAfter: number }[] = []
     for (const bp of baselines) {
       const r = runBaselineCalc(bp.kind, bp.hrid, action, bp.catalystRank)
       if (!r) return null
       profitSum += r.profitPH - bp.profitPH
       expSum += r.expPH - bp.expPH
+      projects.push({ hrid: bp.hrid, profitBefore: bp.profitPH, profitAfter: r.profitPH, expBefore: bp.expPH, expAfter: r.expPH })
     }
-    return { profitDelta: profitSum / baselines.length, expDelta: expSum / baselines.length }
+    return { profitDelta: profitSum / baselines.length, expDelta: expSum / baselines.length, projects }
   })
 }
 
@@ -277,16 +321,43 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
       current++
       params.onProgress?.(`${presetResult.presetName} · ${getTrans(def.labelKey)}`, current, total)
 
-      const baselines = runWithPlayerContext(preset.config, () => findTopProjects(def.action, topN))
-      if (!baselines.length) continue
+      const { all: allTop, perKind } = runWithPlayerContext(preset.config, () => findTopProjects(def.action))
+      if (!allTop.length) continue
+      // 自选候选池：炼金=三种玩法各自前 8（同一物品可按不同玩法分别勾选）；三制造=利润前 12 ∪ 全部基础材料
+      const isMultiKind = perKind.length > 1
+      const optionPool = isMultiKind ? perKind.flatMap(list => list.slice(0, 8)) : allTop
+      const baselineOptions: BaselineItem[] = isMultiKind
+        ? optionPool.map(b => ({ hrid: b.hrid, name: itemDisplayName(b.hrid), profitPH: b.profitPH, kind: b.kind }))
+        : (() => {
+            const baseHrids = getBaseMaterialHridsOf(def.action)
+            const top12 = allTop.slice(0, 12)
+            const extras = allTop.filter(p => baseHrids.has(p.hrid) && !top12.includes(p))
+            return [...top12, ...extras].sort((a, b) => b.profitPH - a.profitPH)
+          })().map(b => ({ hrid: b.hrid, name: itemDisplayName(b.hrid), profitPH: b.profitPH }))
+      // 玩家自选基准优先；所选项目不在候选池内（等级不够等）会被过滤，全被滤掉则回退 topN
+      // 炼金条目用 `${hrid}#${kind}` 区分玩法，三制造沿用纯 hrid
+      const override = params.baselineOverrides?.[`${preset.index}-${def.action}`]
+      let baselines: BaselineProject[]
+      if (override && override.length) {
+        const picked = new Set(override)
+        baselines = optionPool
+          .filter(p => (isMultiKind ? picked.has(`${p.hrid}#${p.kind}`) : picked.has(p.hrid)))
+          .slice(0, 20)
+        if (!baselines.length) baselines = allTop.slice(0, topN)
+      } else {
+        baselines = allTop.slice(0, topN)
+      }
 
       const baselineProfitPH = baselines.reduce((sum, b) => sum + b.profitPH, 0) / baselines.length
+      const baselineExpPH = baselines.reduce((sum, b) => sum + b.expPH, 0) / baselines.length
       const item = preset.config.actionConfigMap.get(def.action) ?? getDefaultActionConfigOf(def.action)
       const actionResult: ActionUpgradeResult = {
         action: def.action,
         actionLabel: getTrans(def.labelKey),
-        baselines: baselines.map(b => ({ hrid: b.hrid, name: itemDisplayName(b.hrid), profitPH: b.profitPH })),
+        baselines: baselines.map(b => ({ hrid: b.hrid, name: itemDisplayName(b.hrid), profitPH: b.profitPH, ...(isMultiKind ? { kind: b.kind } : {}) })),
+        baselineOptions,
         baselineProfitPH,
+        baselineExpPH,
         current: {},
         best: {},
         candidates: []
@@ -304,6 +375,10 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
         actionResult.current[slot] = currentEq?.hrid
           ? { hrid: currentEq.hrid, name: itemDisplayName(currentEq.hrid), level: currentLevel }
           : undefined
+        // 现装售卖价（卖价侧口径）：换装后旧装备卖掉回血，无买单价记 0
+        const oldSellPrice = currentEq?.hrid
+          ? Math.max(0, getPriceOf(currentEq.hrid, currentLevel).bid)
+          : 0
 
         let candidateList: ItemDetail[] = []
         try {
@@ -324,8 +399,8 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
           }
           const sameHrid = cand.hrid === currentEq?.hrid
           for (const level of levelsFor(cand.hrid, params.evalMode, currentLevel)) {
-            // 跳过与现装完全相同的（同物品同强化等级）
-            if (sameHrid && level === currentLevel) continue
+            // 跳过与现装完全相同的（同物品同强化等级）；同款低强化也不考虑（若被评估为提升，多半是现装等级数据缺失）
+            if (sameHrid && level <= currentLevel) continue
             const cost = getPriceOf(cand.hrid, level).ask
             if (typeof cost !== "number" || cost <= 0) continue
 
@@ -340,6 +415,9 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
             const metric = isExpMetric ? delta.expDelta : delta.profitDelta
             if (metric <= 0) continue
 
+            // 回本按净支出计：开售卖抵扣时扣掉旧装卖价（净支出可为 0 = 即刻回本）
+            const netCost = params.sellOff ? Math.max(0, cost - oldSellPrice) : cost
+
             actionResult.candidates.push({
               slot,
               hrid: cand.hrid,
@@ -351,7 +429,9 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
               expDelta: delta.expDelta,
               isExpMetric,
               valueRate: metric / cost,
-              paybackHours: isExpMetric ? Number.POSITIVE_INFINITY : cost / delta.profitDelta
+              paybackHours: isExpMetric ? Number.POSITIVE_INFINITY : netCost / delta.profitDelta,
+              oldSellPrice,
+              projects: delta.projects.map(p => ({ ...p, name: itemDisplayName(p.hrid) }))
             })
           }
         }

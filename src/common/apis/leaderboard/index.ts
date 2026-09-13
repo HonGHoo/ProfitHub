@@ -40,7 +40,7 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
     let hasError = false
     try {
       profitList = calcProfit(sellTaxFactor, includeRare)
-      profitList = profitList.concat(calcAllFlowProfit(sellTaxFactor, crossStepBalance))
+      profitList = profitList.concat(calcAllFlowProfit(sellTaxFactor, crossStepBalance, includeRare))
     } catch (e: any) {
       hasError = true
       console.error(e)
@@ -310,21 +310,24 @@ function calcProfit(sellTaxFactor: number, includeRare: boolean) {
     for (let catalystRank = 0; catalystRank <= 2; catalystRank++) {
       const transmute = new TransmuteCalculator({
         hrid: item.hrid,
-        catalystRank
+        catalystRank,
+        includeRare
       })
       transmute.setSellTaxFactor(sellTaxFactor)
       cList.push(transmute)
 
       const decompose = new DecomposeCalculator({
         hrid: item.hrid,
-        catalystRank
+        catalystRank,
+        includeRare
       })
       decompose.setSellTaxFactor(sellTaxFactor)
       cList.push(decompose)
 
       const coinify = new CoinifyCalculator({
         hrid: item.hrid,
-        catalystRank
+        catalystRank,
+        includeRare
       })
       coinify.setSellTaxFactor(sellTaxFactor)
       cList.push(coinify)
@@ -338,7 +341,7 @@ function calcProfit(sellTaxFactor: number, includeRare: boolean) {
       [getTrans("冲泡"), "brewing"]
     ]
     for (const [project, action] of projects) {
-      const c = new ManufactureCalculator({ hrid: item.hrid, project, action })
+      const c = new ManufactureCalculator({ hrid: item.hrid, project, action, includeRare })
       c.setSellTaxFactor(sellTaxFactor)
       handlePush(profitList, c)
     }
@@ -357,7 +360,7 @@ function calcProfit(sellTaxFactor: number, includeRare: boolean) {
   return profitList
 }
 
-function calcAllFlowProfit(sellTaxFactor: number, crossStepBalance: boolean) {
+function calcAllFlowProfit(sellTaxFactor: number, crossStepBalance: boolean, includeRare: boolean) {
   const gameData = getGameDataApi()
   // 所有物品列表
   const list = Object.values(gameData.itemDetailMap)
@@ -372,7 +375,7 @@ function calcAllFlowProfit(sellTaxFactor: number, crossStepBalance: boolean) {
     ]
     for (const [project, action] of projects) {
       const configs: StorageCalculatorItem[] = []
-      let c = new ManufactureCalculator({ hrid: item.hrid, project, action })
+      let c = new ManufactureCalculator({ hrid: item.hrid, project, action, includeRare })
       let actionItem = c.actionItem
       if (!actionItem?.upgradeItemHrid) {
         continue
@@ -390,7 +393,7 @@ function calcAllFlowProfit(sellTaxFactor: number, crossStepBalance: boolean) {
 
         // D4更新后，会出现多步动作中出现不同Action组合的情况
         for (const [project, action] of projects) {
-          c = new ManufactureCalculator({ hrid: actionItem.upgradeItemHrid, project, action })
+          c = new ManufactureCalculator({ hrid: actionItem.upgradeItemHrid, project, action, includeRare })
           if (c.actionItem) {
             break
           }

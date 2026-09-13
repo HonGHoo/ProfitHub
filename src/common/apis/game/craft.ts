@@ -58,3 +58,49 @@ export function getCraftCostOf(hrid: string): number {
   craftCostCache.set(cacheKey, value)
   return value
 }
+
+/**
+ * 买材料自制的纯材料成本：顶层不取卖单价，按配方把材料买齐（材料有卖单直接买，
+ * 无卖单的中间品继续往下递归），多配方取最便宜。无制造配方返回 -1。
+ */
+function materialCostRecursive(hrid: string, depth: number): number {
+  if (depth <= 0) return -1
+  const key = hrid.substring(hrid.lastIndexOf("/") + 1)
+  let best = -1
+  for (const action of MANUFACTURE_ACTIONS) {
+    const ad = getActionDetailOf(`/actions/${action}/${key}`)
+    if (!ad) continue
+    let cost = 0
+    let ok = true
+    if (ad.upgradeItemHrid) {
+      const p = craftCostRecursive(ad.upgradeItemHrid, depth - 1)
+      if (p < 0) {
+        ok = false
+        break
+      }
+      cost += p
+    }
+    for (const input of ad.inputItems) {
+      const p = craftCostRecursive(input.itemHrid, depth - 1)
+      if (p < 0) {
+        ok = false
+        break
+      }
+      cost += p * input.count
+    }
+    if (ok && (best < 0 || cost < best)) best = cost
+  }
+  return best
+}
+
+const materialCostCache = new Map<string, number>()
+
+export function getMaterialCostOf(hrid: string): number {
+  const ts = useGameStoreOutside().marketData?.timestamp ?? 0
+  const cacheKey = `${ts}|${hrid}`
+  const cached = materialCostCache.get(cacheKey)
+  if (cached !== undefined) return cached
+  const value = materialCostRecursive(hrid, 3)
+  materialCostCache.set(cacheKey, value)
+  return value
+}

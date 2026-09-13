@@ -339,7 +339,7 @@ const onPriceStatusChange = usePriceStatus("junglest-price-status")
       <GameInfo />
 
       <div>
-        <ActionConfig :actions="['enhancing']" :equipments="['hands', 'neck', 'earrings', 'ring', 'pouch']" @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
+        <ActionConfig :show-compare="true" :actions="['enhancing']" :equipments="['hands', 'neck', 'earrings', 'ring', 'pouch']" @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
       </div>
 
       <PriceStatusSelect @change="onPriceStatusChange" />

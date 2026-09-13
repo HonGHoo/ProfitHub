@@ -27,7 +27,7 @@ export function handleSort(profitList: Calculator[], params: any) {
     })
     // DEBUG
     const vals = sorted.map(c => getValue(c)).filter(v => v != null)
-    console.log(`[handleSort] order=${order} prop=${props.join(".")} total=${sorted.length} withVal=${vals.length} first3=${JSON.stringify(vals.slice(0,3))} last3=${JSON.stringify(vals.slice(-3))}`)
+    console.log(`[handleSort] order=${order} prop=${props.join(".")} total=${sorted.length} withVal=${vals.length} first3=${JSON.stringify(vals.slice(0, 3))} last3=${JSON.stringify(vals.slice(-3))}`)
   } else {
     sorted.sort((a, b) => b.result.profitPH - a.result.profitPH)
   }
@@ -68,8 +68,18 @@ export function handleSearch(profitList: Calculator[], params: any) {
   )
 
   if (params.project) {
-    const target = normalizeProject(params.project)
-    profitList = profitList.filter(cal => normalizeProject(cal.project).includes(target) || cal.project.includes(params.project!))
+    // ^ 开头 = 正则匹配（打野页分类筛选用锚定正则区分纯强化/制造流），其余保持子串匹配；非法正则按子串回退
+    if (params.project.startsWith("^")) {
+      try {
+        const projectRegex = new RegExp(params.project)
+        profitList = profitList.filter(cal => projectRegex.test(cal.project))
+      } catch {
+        profitList = profitList.filter(cal => cal.project.includes(params.project!))
+      }
+    } else {
+      const target = normalizeProject(params.project)
+      profitList = profitList.filter(cal => normalizeProject(cal.project).includes(target) || cal.project.includes(params.project!))
+    }
   }
   params.banEquipment && (profitList = profitList.filter(cal => !cal.isEquipment))
   params.banJewelry && (profitList = profitList.filter(cal =>

@@ -7,8 +7,10 @@ import { CoinifyCalculator, DecomposeCalculator, TransmuteCalculator } from "@/c
 import { ManufactureCalculator } from "@/calculator/manufacture"
 import { getStorageCalculatorItem } from "@/calculator/utils"
 import { WorkflowCalculator } from "@/calculator/workflow"
+import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
 import locales, { getTrans } from "@/locales"
 import { useGameStoreOutside } from "@/pinia/stores/game"
+import { usePlayerStoreOutside } from "@/pinia/stores/player"
 import { getGameDataApi } from "../game"
 import { handlePage, handlePush, handleSearch, handleSort } from "../utils"
 
@@ -20,26 +22,30 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
   if (!useGameStoreOutside().gameData || !useGameStoreOutside().marketData) {
     return { list: [], total: 0 } as any
   }
-  if (useGameStoreOutside().getManualchemyCache()) {
-    profitList = useGameStoreOutside().getManualchemyCache()
+  const includeRare = params.includeRare !== false
+  const includeTax = params.includeTax !== false
+  const sellTaxFactor = includeTax ? SELL_TAX_FACTOR : NO_TAX_FACTOR
+  const cacheKey = `${useGameStoreOutside().marketData!.timestamp}-r${includeRare ? "1" : "0"}-t${includeTax ? "tax" : "noTax"}-buy${useGameStoreOutside().buyStatus}-sell${useGameStoreOutside().sellStatus}-v${usePlayerStoreOutside().configVersion}`
+  if (useGameStoreOutside().getManualchemyCache(cacheKey)) {
+    profitList = useGameStoreOutside().getManualchemyCache(cacheKey)!
   } else {
     await new Promise(resolve => setTimeout(resolve, 300))
     const startTime = Date.now()
     try {
-      profitList = profitList.concat(calcAllFlowProfit())
+      profitList = profitList.concat(calcAllFlowProfit(sellTaxFactor, includeRare))
     } catch (e: any) {
       console.error(e)
     }
 
     if (profitList.length > 0) {
-      useGameStoreOutside().setManualchemyCache(profitList)
+      useGameStoreOutside().setManualchemyCache(profitList, cacheKey)
     }
     ElMessage.success(t("计算完成，耗时{0}秒", [(Date.now() - startTime) / 1000]))
   }
   return handlePage(handleSort(handleSearch(profitList, params), params), params)
 }
 
-function calcAllFlowProfit() {
+function calcAllFlowProfit(sellTaxFactor: number, includeRare: boolean) {
   const gameData = getGameDataApi()
   // 所有物品列表
   const list = Object.values(gameData.itemDetailMap)
@@ -68,7 +74,7 @@ function calcAllFlowProfit() {
   list.forEach((item) => {
     for (const [project, action] of projects) {
       const configs: StorageCalculatorItem[] = []
-      let c = new ManufactureCalculator({ hrid: item.hrid, project, action })
+      let c = new ManufactureCalculator({ hrid: item.hrid, project, action, includeRare })
       let actionItem = c.actionItem
 
       while (actionItem?.upgradeItemHrid) {
@@ -83,13 +89,15 @@ function calcAllFlowProfit() {
             item,
             projectName,
             configs,
-            profitList
+            profitList,
+            sellTaxFactor,
+            includeRare
           })
         }
 
         // D4更新后，会出现多步动作中出现不同Action组合的情况
         for (const [project, action] of projects) {
-          c = new ManufactureCalculator({ hrid: actionItem.upgradeItemHrid, project, action })
+          c = new ManufactureCalculator({ hrid: actionItem.upgradeItemHrid, project, action, includeRare })
           if (c.actionItem) {
             break
           }
@@ -108,7 +116,9 @@ function calcAllFlowProfit() {
         item,
         projectName,
         configs,
-        profitList
+        profitList,
+        sellTaxFactor,
+        includeRare
       })
     }
   })
@@ -119,30 +129,37 @@ function calcManualchemyProfit({
   item,
   projectName,
   configs,
-  profitList
+  profitList,
+  sellTaxFactor,
+  includeRare
 }: {
   item: ItemDetail
   projectName?: string
   configs: StorageCalculatorItem[]
   profitList: Calculator[]
+  sellTaxFactor: number
+  includeRare: boolean
 }) {
   const cList = []
   for (let catalystRank = 0; catalystRank <= 2; catalystRank++) {
     cList.push(new TransmuteCalculator({
       hrid: item.hrid,
-      catalystRank
+      catalystRank,
+      includeRare
     }))
     cList.push(new DecomposeCalculator({
       hrid: item.hrid,
-      catalystRank
+      catalystRank,
+      includeRare
     }))
     cList.push(new CoinifyCalculator({
       hrid: item.hrid,
-      catalystRank
+      catalystRank,
+      includeRare
     }))
   }
   for (const c of cList) {
     const alcheConfig = getStorageCalculatorItem(c)
-    handlePush(profitList, new WorkflowCalculator([...configs, alcheConfig], `${projectName}-${c.project}`))
+    handlePush(profitList, new WorkflowCalculator([...configs, alcheConfig], `${projectName}-${c.project}`, sellTaxFactor))
   }
 }

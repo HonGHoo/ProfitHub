@@ -113,6 +113,8 @@ export const useGameStore = defineStore("game", {
     superAlchemyCache: {} as { [key: string]: any[] },
     volHistory: [] as { ts: number, v: Record<string, number> }[],
     realtimeData: null as { ts: number, data: Record<string, { a: number, b: number, t: number }> } | null,
+    /** 社区Buff实时数据（搭 realtime.json 顺风车下发），hrid → 等级 */
+    communityBuffsLive: null as { ts: number, buffs: Record<string, number> } | null,
     realtimeProbeAfter: 0,
     jungleCache: {} as { [key: string]: WorkflowCalculator[] },
     junglestCache: {} as { [key: string]: EnhanceCalculator[] },
@@ -146,8 +148,15 @@ export const useGameStore = defineStore("game", {
           return
         }
         const data = await res.json()
-        if (data && data.data && Object.keys(data.data).length > 0) {
+        const hasData = data && data.data && Object.keys(data.data).length > 0
+        const hasBuffs = data && data.buffs && typeof data.buffs === "object" && Object.keys(data.buffs).length > 0
+        if (hasData) {
           this.realtimeData = data
+        }
+        if (hasBuffs) {
+          this.communityBuffsLive = { ts: data.buffTs || data.ts || Date.now(), buffs: data.buffs }
+        }
+        if (hasData || hasBuffs) {
           this.realtimeProbeAfter = 0
         } else {
           // Worker PUBLIC=0 时公开接口回空 data：1 小时探测一次，PUBLIC=1 后自动恢复轮询
@@ -313,12 +322,13 @@ export const useGameStore = defineStore("game", {
     clearEnhanposerCache() {
       this.enhanposerCache = {}
     },
-    getManualchemyCache() {
-      return this.manualchemyCache[this.marketData!.timestamp]
+    getManualchemyCache(key?: string) {
+      const cacheKey = key ?? String(this.marketData!.timestamp)
+      return this.manualchemyCache[cacheKey]
     },
-    setManualchemyCache(list: Calculator[]) {
-      this.clearManualchemyCache()
-      this.manualchemyCache[this.marketData!.timestamp] = list
+    setManualchemyCache(list: Calculator[], key?: string) {
+      const cacheKey = key ?? String(this.marketData!.timestamp)
+      this.manualchemyCache[cacheKey] = list
     },
     clearManualchemyCache() {
       this.manualchemyCache = {}

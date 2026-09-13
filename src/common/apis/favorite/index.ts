@@ -1,18 +1,19 @@
 import type { RequestData } from "../leaderboard/type"
 import type Calculator from "@/calculator"
 import { calculatorConstructable, getCalculatorInstance, getStorageCalculatorItem } from "@/calculator/utils"
+import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
 import { getEquipmentTypeOf } from "@/common/utils/game"
 import { useFavoriteStoreOutside } from "@/pinia/stores/favorite"
 import { handleVolume1hSearch } from "../utils"
-import { SELL_TAX_FACTOR, NO_TAX_FACTOR } from "@/common/constants/market"
 /** 查 */
 export async function getFavoriteDataApi(params: RequestData) {
   await new Promise(resolve => setTimeout(resolve, 300))
   const sellTaxFactor = params.includeTax === false ? NO_TAX_FACTOR : SELL_TAX_FACTOR
   const crossStepBalance = params.crossStepBalance === true
+  const includeRare = params.includeRare !== false
   let profitList: Calculator[] = []
   try {
-    profitList = calcProfit(sellTaxFactor, crossStepBalance)
+    profitList = calcProfit(sellTaxFactor, crossStepBalance, includeRare)
   } catch (e: any) {
     console.error(e)
   }
@@ -28,14 +29,19 @@ export async function getFavoriteDataApi(params: RequestData) {
   return { list: profitList.slice((params.currentPage - 1) * params.size, params.currentPage * params.size), total: profitList.length }
 }
 
-function calcProfit(sellTaxFactor: number, crossStepBalance: boolean) {
+function calcProfit(sellTaxFactor: number, crossStepBalance: boolean, includeRare: boolean) {
   // 所有物品列表
   const list = useFavoriteStoreOutside().list
   const profitList: Calculator[] = []
   list.filter(item => calculatorConstructable(item.className!)).forEach((item) => {
     try {
+      // 收藏记录是勾选状态的快照，重建前覆盖为当前勾选值（浅拷贝，不污染持久化数据）
+      const config = { ...item, includeRare } as typeof item
+      if (config.subConfigs?.length) {
+        config.subConfigs = config.subConfigs.map(sc => ({ ...sc, includeRare }))
+      }
       // workflow 的子计算器在构造时就需要正确的税率，因此通过参数透传
-      const instance = getCalculatorInstance(item, sellTaxFactor, crossStepBalance)
+      const instance = getCalculatorInstance(config, sellTaxFactor, crossStepBalance)
       instance.setSellTaxFactor(sellTaxFactor)
       instance.available && profitList.push(instance.run())
     } catch (e) {

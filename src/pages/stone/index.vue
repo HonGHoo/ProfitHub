@@ -20,6 +20,7 @@ const { t } = useI18n()
 const catalystRank = useMemory("stone-catalyst-rank", -1)
 const includeTax = useMemory("stone-include-tax", true)
 const includeRare = useMemory("stone-include-rare", true)
+const craftMode = useMemory("stone-craft-mode", false)
 
 const onPriceStatusChange = usePriceStatus("stone-price-status")
 function handlePriceStatusChange() {
@@ -41,7 +42,8 @@ const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
 
 const legendLines = [
   t("概率：每做一次转化/分解，真的掉出贤者之石的概率。转化本身有成功率（失败则材料全没），已一并算进去。"),
-  t("买价：去市场买这件来源物品要花的钱。带「自制」标签 = 市场没人卖，按自己做出来的材料成本估算。"),
+  t("买价：去市场买这件来源物品要花的钱。带「自制」标签 = 按材料成本计：市场没人卖时的回退，或勾选「买材料自制」后的计价方式。"),
+  t("买材料自制：勾选后来源物品一律按「买材料自己做」的材料成本计价并重排排行榜（无制造配方的仍按市场买价）；买价列同时显示市场买价（划线）供对比。"),
   t("副产物抵扣：做一次不只出石头，还会搭着出别的东西，这些搭头卖掉（扣 5% 税）能回收的钱，直接从成本里减。例：耳环买价 500M，附带 7 只小耳环回收 31M，净投入就是 469M。"),
   t("单颗净成本：（买价 + 催化剂 − 副产物抵扣）÷ 平均每次出几颗，即搞到一颗石头实际花的钱。排行榜按它从便宜到贵排。"),
   t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
@@ -66,7 +68,8 @@ function compute() {
     stoneResult.value = computeStoneLeaderboard({
       catalystRank: catalystRank.value,
       sellTaxFactor: includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR,
-      includeRare: includeRare.value
+      includeRare: includeRare.value,
+      craftMode: craftMode.value
     })
   } catch (e) {
     console.error(e)
@@ -75,7 +78,7 @@ function compute() {
 }
 
 // 进页面即算；设置变化、市场数据刷新（约每小时/5 分钟轮询）、买卖价侧切换自动重算
-watch([catalystRank, includeTax, includeRare], compute, { immediate: true })
+watch([catalystRank, includeTax, includeRare, craftMode], compute, { immediate: true })
 watch(() => gameStore.marketData?.timestamp, () => compute())
 watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
 </script>
@@ -119,6 +122,7 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
         </div>
         <el-checkbox v-model="includeTax" :label="t('计税')" />
         <el-checkbox v-model="includeRare" :label="t('稀有掉落')" />
+        <el-checkbox v-model="craftMode" :label="t('买材料自制')" />
       </div>
       <div class="font-size-12px color-gray-500" style="line-height: 2; margin-top: 8px">
         <div class="font-bold">
@@ -185,13 +189,20 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             <span v-else>{{ t('无') }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('买价')" align="right" width="130">
+        <el-table-column :label="t('买价')" align="right" width="150">
           <template #default="{ row }">
             <span class="flex items-center justify-end gap-1">
-              <el-tag v-if="row.isCraftFallback" size="small" type="info">
+              <el-tag v-if="row.useCraft" size="small" type="info">
                 {{ t('自制') }}
               </el-tag>
               {{ Format.price(row.buyPrice) }}
+              <span
+                v-if="craftMode && row.useCraft && row.marketAsk >= 0"
+                class="color-gray-400"
+                style="text-decoration: line-through; font-size: 12px"
+              >
+                {{ Format.price(row.marketAsk) }}
+              </span>
             </span>
           </template>
         </el-table-column>
@@ -200,7 +211,7 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             <el-tooltip placement="top" effect="light">
               <template #content>
                 <div style="max-width: 320px">
-                  {{ legendLines[2] }}
+                  {{ legendLines[3] }}
                 </div>
               </template>
               <div style="display: flex; justify-content: flex-end; align-items: center; gap: 5px">
@@ -218,7 +229,7 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             <el-tooltip placement="top" effect="light">
               <template #content>
                 <div style="max-width: 320px">
-                  {{ legendLines[3] }}
+                  {{ legendLines[4] }}
                 </div>
               </template>
               <div style="display: flex; justify-content: flex-end; align-items: center; gap: 5px">
@@ -236,7 +247,7 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             <el-tooltip placement="top" effect="light">
               <template #content>
                 <div style="max-width: 320px">
-                  {{ legendLines[4] }}
+                  {{ legendLines[5] }}
                 </div>
               </template>
               <div style="display: flex; justify-content: flex-end; align-items: center; gap: 5px">

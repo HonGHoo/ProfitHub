@@ -253,7 +253,7 @@ const onPriceStatusChange = usePriceStatus("manualchemy-price-status")
     <div class="game-info">
       <GameInfo />
       <div>
-        <ActionConfig @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
+        <ActionConfig :show-compare="true" @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
       </div>
 
       <PriceStatusSelect

@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import logoAlipayOrg from "@@/assets/images/sponsor/alipay_org.jpg?url"
-import logoPolokikiWechat from "@@/assets/images/sponsor/polokiki-wechat.jpg?url"
-import logoPolokikiWechatPay from "@@/assets/images/sponsor/polokiki-wechat-pay.jpg?url"
 import logoHyhfishWechat from "@@/assets/images/sponsor/hyhfish-wechat.jpg?url"
+import logoPolokikiWechatPay from "@@/assets/images/sponsor/polokiki-wechat-pay.jpg?url"
+import logoPolokikiWechat from "@@/assets/images/sponsor/polokiki-wechat.jpg?url"
 import logoWechatOrg from "@@/assets/images/sponsor/wechat_org.jpg?url"
 import axios from "axios"
 import { ElLoading, type FormRules } from "element-plus"
@@ -50,6 +50,22 @@ const rules = reactive<FormRules>({
 
 const paymentCards = [
   {
+    key: "polokiki-wechat",
+    owner: "Polokiki",
+    ownerClass: "maintainer",
+    title: "微信",
+    note: "请Polokiki喝奶茶",
+    imageUrl: logoPolokikiWechatPay
+  },
+  {
+    key: "maintainer-alipay-polokiki",
+    owner: "Polokiki",
+    ownerClass: "maintainer",
+    title: "支付宝",
+    note: "请polokiki喝奶茶",
+    imageUrl: logoPolokikiWechat
+  },
+  {
     key: "maintainer-wechat",
     owner: "hyhfish",
     ownerClass: "maintainer",
@@ -72,23 +88,7 @@ const paymentCards = [
     title: "支付宝",
     note: "luyh7",
     imageUrl: logoAlipayOrg
-  },
-  {
-    key: "polokiki-wechat",
-    owner: "Polokiki",
-    ownerClass: "maintainer",
-    title: "微信",
-    note: "请Polokiki喝奶茶",
-    imageUrl: logoPolokikiWechatPay
-  },
-  {
-    key: "maintainer-alipay-polokiki",
-    owner: "Polokiki",
-    ownerClass: "maintainer",
-    title: "支付宝",
-    note: "请polokiki喝奶茶",
-    imageUrl: logoPolokikiWechat
-  },
+  }
 ]
 
 watch(dialogLoading, (val) => {
@@ -162,7 +162,7 @@ function loadData() {
       // 手动添加的赞助者
       const hardcoded: Sponsor[] = [
         { approved: true, nickname: "Laulau01", platform: "微信", amount: 28.88 },
-        { approved: true, nickname: "Blue", platform: "微信", amount: 30 },
+        { approved: true, nickname: "Blue", platform: "微信", amount: 30 }
       ]
       for (const h of hardcoded) {
         const existing = map.get(h.nickname!)

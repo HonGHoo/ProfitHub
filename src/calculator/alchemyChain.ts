@@ -3,7 +3,7 @@ import type { AlchemyCalculatorConfig } from "@/calculator/alchemy"
 import type { ItemDetail } from "~/game"
 import { CoinifyCalculator, DecomposeCalculator, TransmuteCalculator } from "@/calculator/alchemy"
 import { getGameDataApi, getItemDetailOf, getPriceOf } from "@/common/apis/game"
-import { getCraftCostOf } from "@/common/apis/game/craft"
+import { getCraftCostOf, getMaterialCostOf } from "@/common/apis/game/craft"
 import { getTrans } from "@/locales"
 import { COIN_HRID } from "@/pinia/stores/game"
 
@@ -320,10 +320,14 @@ export interface StoneSourceRow {
   catalystRankUsed: number
   /** 每次动作的期望石头数（转化=dropRate，分解=确定性数量） */
   stonesPerAction: number
-  /** 来源物品买价（ask）；无卖单时为制造成本回退（isCraftFallback=true） */
+  /** 来源物品生效买价：市场卖单价，或自制成本（useCraft=true） */
   buyPrice: number
-  /** true = 市场无卖单，买价按制造成本估算 */
-  isCraftFallback?: boolean
+  /** true = 按自制成本计价（无卖单回退，或勾选自制比价后材料成本更低） */
+  useCraft?: boolean
+  /** 市场卖单价（无卖单为 -1），勾选自制比价时供对比展示 */
+  marketAsk?: number
+  /** 买材料自制的纯材料成本（无制造配方为 -1） */
+  craftCost?: number
   /** 税后副产物期望抵扣（其他产物 EV，含稀有掉落） */
   byproductIncome: number
   /** 单颗贤者之石净成本 =（买价+催化剂 − 副产物抵扣）÷ 期望石头数 */
@@ -342,7 +346,7 @@ export interface StoneLeaderboardResult {
  * 贤者之石获取排行：扫全部物品，找转化掉落表/分解产物里含贤者之石的来源，
  * 复用转化/分解计算器（含催化剂成本、稀有掉落、税），按单颗净成本升序。
  */
-export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean }): StoneLeaderboardResult {
+export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean }): StoneLeaderboardResult {
   const gameData = getGameDataApi()
   const stoneBid = getPriceOf(STONE_HRID, 0).bid
   const candidates: { hrid: string, method: "transmute" | "decompose" }[] = []
@@ -361,19 +365,34 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
   let excludedCount = 0
   for (const cand of candidates) {
     const marketAsk = getPriceOf(cand.hrid, 0).ask
-    // 无卖单 → 回退制造成本（买不到就自己造）；仍无法定价才排除
-    const isCraftFallback = marketAsk < 0
-    const buyPrice = marketAsk >= 0 ? marketAsk : getCraftCostOf(cand.hrid)
+    const craftCost = opts.craftMode ? getMaterialCostOf(cand.hrid) : -1
+    // 生效买价：勾选「买材料自制」时一律按材料成本计（无制造配方的回退市场价）；
+    // 未勾选保持原逻辑：有卖单用卖单价，无卖单回退制造成本（买不到就自己造）
+    let buyPrice: number
+    let useCraft = false
+    if (craftCost > 0) {
+      buyPrice = craftCost
+      useCraft = true
+    } else if (marketAsk >= 0) {
+      buyPrice = marketAsk
+    } else {
+      buyPrice = getCraftCostOf(cand.hrid)
+      useCraft = buyPrice > 0
+    }
     if (!(buyPrice > 0)) {
       excludedCount++
       continue
     }
     const ranks = opts.catalystRank === -1 ? [0, 1, 2] : [opts.catalystRank]
+    // 自制计价时把生效价锁进计算器（immutable 优先级最高，覆盖台账/市场价）
+    const ingredientPriceConfigList = useCraft
+      ? [{ hrid: cand.hrid, immutable: true, price: buyPrice }]
+      : []
     let best: StoneSourceRow | null = null
     for (const rank of ranks) {
       const calc = cand.method === "transmute"
-        ? new TransmuteCalculator({ hrid: cand.hrid, catalystRank: rank, includeRare: opts.includeRare })
-        : new DecomposeCalculator({ hrid: cand.hrid, catalystRank: rank, includeRare: opts.includeRare })
+        ? new TransmuteCalculator({ hrid: cand.hrid, catalystRank: rank, includeRare: opts.includeRare, ingredientPriceConfigList })
+        : new DecomposeCalculator({ hrid: cand.hrid, catalystRank: rank, includeRare: opts.includeRare, ingredientPriceConfigList })
       calc.setSellTaxFactor(opts.sellTaxFactor)
       const stoneEntry = calc.productListWithPrice.find(p => p.hrid === STONE_HRID)
       if (!stoneEntry) continue
@@ -388,7 +407,7 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const byproductIncome = calc.income * succ - stoneValuePerAttempt
       const costPerStone = (calc.cost - byproductIncome) / stonesPerAction
       if (!Number.isFinite(costPerStone)) continue
-      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, isCraftFallback, byproductIncome, costPerStone }
+      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, useCraft, marketAsk, craftCost, byproductIncome, costPerStone }
       if (!best || row.costPerStone < best.costPerStone) best = row
     }
     if (best) rows.push(best)

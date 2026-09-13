@@ -488,7 +488,7 @@ const isSuperJungle = computed(() => dataSource.value.type === "junglest")
     <div class="game-info">
       <GameInfo />
       <div>
-        <ActionConfig :actions="['enhancing', 'cheesesmithing', 'crafting', 'tailoring']" :equipments="['off_hand', 'hands', 'neck', 'earrings', 'ring', 'pouch']" @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
+        <ActionConfig :show-compare="true" :actions="['enhancing', 'cheesesmithing', 'crafting', 'tailoring']" :equipments="['off_hand', 'hands', 'neck', 'earrings', 'ring', 'pouch']" @toggle-compare="!isComparing && (showCompareSelector = !showCompareSelector)" />
       </div>
       <PriceStatusSelect
         @change="onPriceStatusChange"

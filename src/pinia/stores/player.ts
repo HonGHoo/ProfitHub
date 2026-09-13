@@ -207,6 +207,8 @@ export interface ActionConfig {
   seals?: string[]
   /** 战斗房等级合计（7间） */
   combatHouseLevel?: number
+  /** 社区Buff跟随实时数据（搭 realtime.json 顺风车下发），开启后计算用最新等级 */
+  liveCommunityBuff?: boolean
   actionConfigMap: Map<Action, ActionConfigItem>
   specialEquimentMap: Map<Equipment, PlayerEquipmentItem>
   communityBuffMap: Map<CommunityBuff, CommunityBuffItem>
