@@ -62,7 +62,7 @@ const paymentCards = [
     owner: "Polokiki",
     ownerClass: "maintainer",
     title: "支付宝",
-    note: "请polokiki喝奶茶",
+    note: "请Polokiki喝奶茶",
     imageUrl: logoPolokikiWechat
   },
   {
@@ -206,7 +206,7 @@ loadData()
         {{ t('当前维护者：') }}<span class="maintainer">Polokiki</span> / QQ：<span class="maintainer">1508828092</span>
       </p>
       <p class="meta-line">
-        {{ t('请 {0} 喝杯奶茶', ['luyh7、hyhfish、Polokiki']) }}
+        {{ t('请 {0} 喝杯奶茶', ['Polokiki']) }}
       </p>
     </div>
 
