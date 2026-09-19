@@ -256,8 +256,9 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             </el-tooltip>
           </template>
           <template #default="{ row }">
+            <!-- 价差可为负（自制比直接买贵），不能用 Format.price——负数会被当"无单"哨兵 -->
             <span :class="(stoneAsk - row.costPerStone) >= 0 ? 'color-green' : 'color-red'">
-              {{ Format.price(stoneAsk - row.costPerStone) }}
+              {{ stoneAsk > 0 ? Format.money(stoneAsk - row.costPerStone) : "—" }}
             </span>
           </template>
         </el-table-column>
