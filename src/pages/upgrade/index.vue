@@ -22,6 +22,7 @@ const evalMode = ref<EvalMode>("all")
 const topN = ref(5)
 const showAll = ref(false)
 const sellOff = useMemory("upgrade-sell-off", true)
+const budgetM = useMemory("upgrade-budget-m", null)
 const loading = ref(false)
 const progressLabel = ref("")
 const progressCurrent = ref(0)
@@ -95,6 +96,7 @@ async function runCompare() {
       topN: topN.value,
       baselineOverrides: baselineOverrides.value,
       sellOff: sellOff.value,
+      budget: budgetM.value != null && budgetM.value > 0 ? Math.round(budgetM.value * 1e6) : undefined,
       onProgress: (label, current, total) => {
         progressLabel.value = label
         progressCurrent.value = current
@@ -114,7 +116,16 @@ async function runCompare() {
 
 function rowsOf(action: ActionUpgradeResult): UpgradeCandidate[] {
   if (showAll.value) return action.candidates
-  return UPGRADE_SLOTS.map(slot => action.best[slot]).filter(Boolean) as UpgradeCandidate[]
+  return UPGRADE_SLOTS
+    .map((slot) => {
+      const best = action.best[slot]
+      if (best) return best
+      // 该部位有候选但全部超预算 → 灰字占位行（无 hrid），不再推天价装备
+      return action.candidates.some(c => c.slot === slot)
+        ? ({ slot, overBudget: true } as unknown as UpgradeCandidate)
+        : null
+    })
+    .filter(Boolean) as UpgradeCandidate[]
 }
 
 function slotLabel(slot: string) {
@@ -198,6 +209,22 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => {
             <el-option :value="3" label="3" />
             <el-option :value="5" label="5" />
           </el-select>
+        </div>
+        <div class="flex items-center gap-2">
+          <el-tooltip :content="t('单件装备支出上限，超出预算的候选不再推荐（开「卖旧装抵扣」时按净支出计）。留空或 0 = 不限。')" placement="top">
+            <span>{{ t("预算上限") }}</span>
+          </el-tooltip>
+          <el-input-number
+            v-model="budgetM"
+            :min="0"
+            :step="1"
+            :precision="1"
+            :controls="false"
+            :placeholder="t('不限')"
+            style="width: 90px"
+            @change="results.length && runCompare()"
+          />
+          <span>M</span>
         </div>
         <div class="flex items-center gap-2">
           <span>{{ t("显示全部候选") }}</span>
@@ -310,33 +337,47 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => {
           </el-table-column>
           <el-table-column :label="t('建议装备')" min-width="160">
             <template #default="{ row }">
-              <ItemIcon :hrid="row.hrid" />
-              {{ row.name }}
-              <el-tag v-if="row.evalLevel > 0" size="small" type="warning">
-                +{{ row.evalLevel }}
-              </el-tag>
-              <el-tag v-else size="small" type="info">
-                {{ t("白板") }}
-              </el-tag>
-              <el-tag size="small">
-                {{ t("等级") }}{{ row.itemLevel }}
-              </el-tag>
+              <span v-if="!row.hrid" class="opacity-50">{{ t("预算内无候选") }}</span>
+              <template v-else>
+                <ItemIcon :hrid="row.hrid" />
+                {{ row.name }}
+                <el-tag v-if="row.evalLevel > 0" size="small" type="warning">
+                  +{{ row.evalLevel }}
+                </el-tag>
+                <el-tag v-else size="small" type="info">
+                  {{ t("白板") }}
+                </el-tag>
+                <el-tag size="small">
+                  {{ t("等级") }}{{ row.itemLevel }}
+                </el-tag>
+              </template>
             </template>
           </el-table-column>
           <el-table-column :label="t('成本')" width="120" align="right">
             <template #default="{ row }">
-              <div>{{ Format.price(row.cost) }}</div>
-              <div v-if="sellOff && row.oldSellPrice > 0" class="color-gray-400" style="font-size: 12px">
-                {{ t("卖旧装") }} −{{ Format.price(row.oldSellPrice) }}
-              </div>
+              <template v-if="row.hrid">
+                <div :class="row.overBudget ? 'opacity-50' : ''">
+                  {{ Format.price(row.cost) }}
+                  <el-tag v-if="row.overBudget" size="small" type="danger">
+                    {{ t("超预算") }}
+                  </el-tag>
+                </div>
+                <div v-if="sellOff && row.oldSellPrice > 0" class="color-gray-400" style="font-size: 12px">
+                  {{ t("卖旧装") }} −{{ Format.price(row.oldSellPrice) }}
+                </div>
+              </template>
+              <span v-else class="opacity-50">—</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('提升量')" width="130" align="right">
             <template #default="{ row }">
-              <span :class="row.isExpMetric ? 'text-purple' : 'text-green'">{{ deltaText(row) }}</span>
-              <el-tag v-if="row.isExpMetric" size="small" type="warning" class="ml-1">
-                {{ t("经验") }}
-              </el-tag>
+              <span v-if="!row.hrid" class="opacity-50">—</span>
+              <template v-else>
+                <span :class="row.isExpMetric ? 'text-purple' : 'text-green'">{{ deltaText(row) }}</span>
+                <el-tag v-if="row.isExpMetric" size="small" type="warning" class="ml-1">
+                  {{ t("经验") }}
+                </el-tag>
+              </template>
             </template>
           </el-table-column>
           <el-table-column width="110" align="right">
@@ -349,12 +390,13 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => {
               </span>
             </template>
             <template #default="{ row }">
-              {{ Format.number(row.valueRate * 1000000, 1) }}
+              <span v-if="!row.hrid" class="opacity-50">—</span>
+              <span v-else>{{ Format.number(row.valueRate * 1000000, 1) }}</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('回本(天)')" width="100" align="right">
             <template #default="{ row }">
-              <span v-if="row.isExpMetric" class="opacity-40">—</span>
+              <span v-if="!row.hrid || row.isExpMetric" class="opacity-40">—</span>
               <span v-else>{{ Format.number(row.paybackHours / 24, 1) }}</span>
             </template>
           </el-table-column>

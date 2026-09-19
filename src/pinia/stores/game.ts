@@ -49,8 +49,7 @@ export const COMMUNITY_BUFF_LIST = [
   "moo_card",
   "experience",
   "gathering_quantity",
-  "production_efficiency",
-  "enhancing_speed"
+  "production_efficiency"
 ]
 
 export const ACHIEVEMENT_TIER_LIST = [
@@ -108,7 +107,7 @@ export const useGameStore = defineStore("game", {
     gameData: null as GameData | null,
     marketData: null as MarketData | null,
     leaderboardCache: {} as { [key: string]: Calculator[] },
-    enhanposerCache: {} as { [time: number]: WorkflowCalculator[] },
+    enhanposerCache: {} as { [key: string]: WorkflowCalculator[] },
     manualchemyCache: {} as { [key: string]: Calculator[] },
     superAlchemyCache: {} as { [key: string]: any[] },
     volHistory: [] as { ts: number, v: Record<string, number> }[],
@@ -154,13 +153,20 @@ export const useGameStore = defineStore("game", {
           this.realtimeData = data
         }
         if (hasBuffs) {
-          this.communityBuffsLive = { ts: data.buffTs || data.ts || Date.now(), buffs: data.buffs }
+          const buffTs = data.buffTs || data.ts || Date.now()
+          // KV 里旧 buff 永不过期（最后上报者胜），超 12h 无人上报视为已下线，回退预设手动值
+          if (Date.now() - buffTs < 12 * 3600 * 1000) {
+            this.communityBuffsLive = { ts: buffTs, buffs: data.buffs }
+          } else {
+            this.communityBuffsLive = null
+          }
         }
         if (hasData || hasBuffs) {
           this.realtimeProbeAfter = 0
         } else {
-          // Worker PUBLIC=0 时公开接口回空 data：1 小时探测一次，PUBLIC=1 后自动恢复轮询
-          this.realtimeProbeAfter = Date.now() + 60 * 60 * 1000
+          // 空数据多为边缘缓存 30s 窗口内的旧副本或瞬时抖动，公开常态下 3 分钟后即恢复轮询
+          // （历史值 1h 是 PUBLIC=0 收集期防烧额度用的，公开后过时）
+          this.realtimeProbeAfter = Date.now() + 3 * 60 * 1000
         }
       } catch {
         // 域名未生效/网络不可达时静默
@@ -312,14 +318,19 @@ export const useGameStore = defineStore("game", {
       }
       this.leaderboardCache = {}
     },
-    getEnhanposerCache() {
-      return this.enhanposerCache[this.marketData!.timestamp]
+    getEnhanposerCache(key?: string) {
+      const cacheKey = key ?? String(this.marketData!.timestamp)
+      return this.enhanposerCache[cacheKey]
     },
-    setEnhanposerCache(list: WorkflowCalculator[]) {
-      this.clearEnhanposerCache()
-      this.enhanposerCache[this.marketData!.timestamp] = list
+    setEnhanposerCache(list: WorkflowCalculator[], key?: string) {
+      const cacheKey = key ?? String(this.marketData!.timestamp)
+      this.enhanposerCache[cacheKey] = list
     },
-    clearEnhanposerCache() {
+    clearEnhanposerCache(key?: string) {
+      if (key) {
+        delete this.enhanposerCache[key]
+        return
+      }
       this.enhanposerCache = {}
     },
     getManualchemyCache(key?: string) {
@@ -430,7 +441,7 @@ function hasAvgVolFields(data: MarketData | null | undefined) {
   return false
 }
 
-async function updateMarketData(oldData: MarketData | null, newData: MarketDataPlain, newGameData: GameData): Promise<MarketData> {
+export async function updateMarketData(oldData: MarketData | null, newData: MarketDataPlain, newGameData: GameData): Promise<MarketData> {
   const oldMarket = oldData?.marketData || {}
   const newMarket: Market = { }
 

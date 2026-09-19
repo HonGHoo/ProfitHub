@@ -59,6 +59,11 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
     }
   }
   profitList.forEach(item => item.favorite = useFavoriteStoreOutside().hasFavorite(item))
+  // 对比模式取全量：跳过搜索/排序/分页。预设对比列按物品 key join，走正常过滤会把
+  // 该预设里利润率/时薪不达标的物品滤掉（默认搜索 profitRate≥10%），导致整列「—」
+  if (params.fullList) {
+    return { list: profitList, total: profitList.length } as any
+  }
   profitList = profitList.filter(item => item.actionLevel >= (params.actionLevel || 0))
   const hasMaxItemLevel = params.maxItemLevel !== undefined && params.maxItemLevel !== null
   if (hasMaxItemLevel) {
@@ -295,6 +300,24 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
           Array.from(selectedPrefixes).some((p: string) => ing.name.startsWith(p)))
       })
     }
+  }
+
+  // 最高利润步骤：同一产物的多条步数路径（1步买料 / 2步…N步火车）只保留利润/h 最高的一条
+  if (params.bestStepOnly) {
+    const bestOf = new Map<string, any>()
+    const noHrid: any[] = []
+    for (const row of profitList as any[]) {
+      const hrid: string | undefined = row.item?.hrid
+      if (!hrid) {
+        noHrid.push(row)
+        continue
+      }
+      const prev = bestOf.get(hrid)
+      if (!prev || (row.result?.profitPH ?? -Infinity) > (prev.result?.profitPH ?? -Infinity)) {
+        bestOf.set(hrid, row)
+      }
+    }
+    profitList = noHrid.concat(Array.from(bestOf.values()))
   }
 
   return handlePage(handleSort(handleSearch(profitList, params), params), params)

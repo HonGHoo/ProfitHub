@@ -35,6 +35,10 @@ export interface RequestData {
   endTierLevel?: number | string
   /** 纯净火车：仅显示名称匹配当前材质链的产物 */
   pureOnly?: boolean
+  /** 最高利润步骤：同一产物多条步数路径（1步买料/N步火车）只保留利润/h 最高的一条 */
+  bestStepOnly?: boolean
+  /** 对比模式：返回未经搜索/排序/分页的全量列表（首页对比列按物品 join 取数，过滤会把预设列滤成空） */
+  fullList?: boolean
 }
 
 export type ResponseData = ApiResponseData<{

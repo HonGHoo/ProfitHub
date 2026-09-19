@@ -338,6 +338,8 @@ export interface StoneLeaderboardResult {
   rows: StoneSourceRow[]
   /** 贤者之石当前市价（bid），作参照 */
   stoneBid: number
+  /** 贤者之石最低卖单价（ask）：「直接买一颗」花的钱，价差口径 */
+  stoneAsk: number
   /** 因当前无卖单被排除的来源数 */
   excludedCount: number
 }
@@ -349,6 +351,7 @@ export interface StoneLeaderboardResult {
 export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean }): StoneLeaderboardResult {
   const gameData = getGameDataApi()
   const stoneBid = getPriceOf(STONE_HRID, 0).bid
+  const stoneAsk = getPriceOf(STONE_HRID, 0).ask
   const candidates: { hrid: string, method: "transmute" | "decompose" }[] = []
   for (const item of Object.values(gameData.itemDetailMap)) {
     if (!item.isTradable) continue
@@ -364,7 +367,13 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
   const rows: StoneSourceRow[] = []
   let excludedCount = 0
   for (const cand of candidates) {
-    const marketAsk = getPriceOf(cand.hrid, 0).ask
+    // 来源多为可强化装备：挂单常在 +N 档而 0 档无单，转化/分解又不看强化等级，
+    // 故买价取全等级最低卖单（跨档买最便宜的，只看 0 档会把能买到的来源误标「无单」）
+    let marketAsk = -1
+    for (let lv = 0; lv <= 20; lv++) {
+      const a = getPriceOf(cand.hrid, lv).ask
+      if (typeof a === "number" && a > 0 && (marketAsk < 0 || a < marketAsk)) marketAsk = a
+    }
     const craftCost = opts.craftMode ? getMaterialCostOf(cand.hrid) : -1
     // 生效买价：勾选「买材料自制」时一律按材料成本计（无制造配方的回退市场价）；
     // 未勾选保持原逻辑：有卖单用卖单价，无卖单回退制造成本（买不到就自己造）
@@ -413,5 +422,5 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
     if (best) rows.push(best)
   }
   rows.sort((a, b) => a.costPerStone - b.costPerStone)
-  return { rows, stoneBid, excludedCount }
+  return { rows, stoneBid, stoneAsk, excludedCount }
 }

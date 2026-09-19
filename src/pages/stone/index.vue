@@ -32,10 +32,10 @@ function handlePriceStatusChange() {
 const gameStore = useGameStore()
 const stoneResult = ref<StoneLeaderboardResult | null>(null)
 
-// 现价按税后口径展示与比价（勾"计税"时 ×0.95：自己卖出一颗石头到手的是税后价）
-const stoneBidAfterTax = computed(() => {
-  if (!stoneResult.value) return -1
-  return stoneResult.value.stoneBid * (includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR)
+// 价差口径（省钱）：市场直接买一颗（最低卖单 ask）− 单颗净成本 = 自己做省多少。
+// 买入本身不涉税，计税开关只影响成本侧（副产物按税后抵扣）
+const stoneAsk = computed(() => {
+  return stoneResult.value?.stoneAsk ?? -1
 })
 
 const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
@@ -46,7 +46,7 @@ const legendLines = [
   t("买材料自制：勾选后来源物品一律按「买材料自己做」的材料成本计价并重排排行榜（无制造配方的仍按市场买价）；买价列同时显示市场买价（划线）供对比。"),
   t("副产物抵扣：做一次不只出石头，还会搭着出别的东西，这些搭头卖掉（扣 5% 税）能回收的钱，直接从成本里减。例：耳环买价 500M，附带 7 只小耳环回收 31M，净投入就是 469M。"),
   t("单颗净成本：（买价 + 催化剂 − 副产物抵扣）÷ 平均每次出几颗，即搞到一颗石头实际花的钱。排行榜按它从便宜到贵排。"),
-  t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
+  t("价差：市场直接买一颗的最低卖单 − 单颗净成本。绿色 = 自己做一颗比直接买省的钱；红色 = 不如直接买。")
 ]
 
 function fmtStones(v: number) {
@@ -139,8 +139,7 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
         <div class="flex items-center justify-between flex-wrap gap-2">
           <span>{{ t('{0} 种来源参与排行（无卖单的按制造成本计入，{1} 种无法定价未计入）', [stoneResult.rows.length, stoneResult.excludedCount]) }}</span>
           <span class="font-size-13px">
-            {{ t('贤者之石现价') }}：{{ Format.price(stoneResult.stoneBid) }}
-            <template v-if="includeTax">（{{ t('税后') }}：{{ Format.price(stoneBidAfterTax) }}）</template>
+            {{ t('贤者之石买价') }}：{{ Format.price(stoneAsk) }}
           </span>
         </div>
       </template>
@@ -257,8 +256,8 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             </el-tooltip>
           </template>
           <template #default="{ row }">
-            <span :class="(stoneBidAfterTax - row.costPerStone) >= 0 ? 'color-green' : 'color-red'">
-              {{ Format.price(stoneBidAfterTax - row.costPerStone) }}
+            <span :class="(stoneAsk - row.costPerStone) >= 0 ? 'color-green' : 'color-red'">
+              {{ Format.price(stoneAsk - row.costPerStone) }}
             </span>
           </template>
         </el-table-column>

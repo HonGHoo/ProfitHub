@@ -183,7 +183,7 @@ export function getSpecialEquipmentListOf(type: string) {
  * @param type
  */
 export function getSpecialEquipmentOf(type: Equipment) {
-  return playerConfig.specialEquimentMap.get(type) ?? defaultPlayerConfig.specialEquimentMap.get(type)!
+  return playerConfig?.specialEquimentMap?.get(type) ?? defaultPlayerConfig.specialEquimentMap.get(type)!
 }
 
 /**
@@ -253,6 +253,8 @@ function liveCommunityBuffLevelOf(hrid?: string): number | undefined {
 
 export function buildBuffMap(config: ActionConfig): BuffMap {
   if (!getGameDataApi()) return {} as BuffMap
+  // 对比模式快速切换预设时 config 可能短暂残缺（specialEquimentMap 未就绪），防御性放行
+  if (!config?.specialEquimentMap || !config?.communityBuffMap) return {} as BuffMap
   const buffs = {} as BuffMap
   const enhanceMultiplier = getGameDataApi().enhancementLevelTotalBonusMultiplierTable
   // 特殊装备

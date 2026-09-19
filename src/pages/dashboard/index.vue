@@ -129,10 +129,10 @@ function startNCompare() {
 
     // If already on this preset, capture immediately without waiting for switch
     if (pidx === usePlayerStore().presetIndex) {
-      const map: Record<string, Calculator> = {}
-      for (const item of leaderboardData.value) map[item.key] = item
-      compareDataSets.value.push(map)
-      captureNext()
+      captureCompareMap().then((map) => {
+        compareDataSets.value.push(map)
+        captureNext()
+      })
     } else {
       _compareResolve = captureNext
       usePlayerStore().switchTo(pidx)
@@ -142,15 +142,31 @@ function startNCompare() {
   captureNext()
 }
 
+// 对比列必须取「未过滤全量」：正常榜单走了搜索过滤+分页切片，预设里利润率/排名
+// 不达标的物品会从 map 里消失，对比列就整列空（详见 getLeaderboardDataApi fullList 注释）
+async function captureCompareMap(): Promise<Record<string, Calculator>> {
+  const data = await getLeaderboardDataApi({
+    currentPage: 1,
+    size: 1,
+    includeTax: includeTax.value,
+    includeRare: includeRare.value,
+    crossStepBalance: crossStepBalance.value,
+    fullList: true
+  })
+  const map: Record<string, Calculator> = {}
+  for (const item of data.list) map[item.key] = item
+  return map
+}
+
 // Watch leaderboardData: capture data for comparison
-watch(leaderboardData, (newVal) => {
+watch(leaderboardData, () => {
   if (_compareResolve) {
-    const map: Record<string, Calculator> = {}
-    for (const item of newVal) map[item.key] = item
-    compareDataSets.value.push(map)
     const resolve = _compareResolve
     _compareResolve = null
-    resolve()
+    captureCompareMap().then((map) => {
+      compareDataSets.value.push(map)
+      resolve()
+    })
   }
 })
 
@@ -186,7 +202,8 @@ const ldSearchData = useMemory("dashboard-leaderboard-search-data", {
   tierChainKey: "",
   startTierLevel: "",
   endTierLevel: "",
-  pureOnly: false
+  pureOnly: false,
+  bestStepOnly: false
 })
 
 const includeTax = useMemory("dashboard-include-tax", true)
@@ -492,6 +509,15 @@ const onPriceStatusChange = usePriceStatus("dashboard-price-status")
                     </el-icon>
                   </el-tooltip>
                 </el-form-item>
+
+                <el-form-item :label="t('最高利润步骤')">
+                  <el-checkbox v-model="ldSearchData.bestStepOnly" @change="handleSearchLD" />
+                  <el-tooltip :content="t('同一产物有多条步数路径（如2步/5步锻造）时，只保留利润/h最高的一条')" placement="top">
+                    <el-icon style="margin-left:6px;cursor:help;color:#909399">
+                      <QuestionFilled />
+                    </el-icon>
+                  </el-tooltip>
+                </el-form-item>
               </template>
 
               <el-form-item prop="name" :label="`${t('利润率')} >`">
@@ -645,10 +671,9 @@ const onPriceStatusChange = usePriceStatus("dashboard-price-status")
                     <span :class="row.hasManualPrice ? 'manual' : ''">
                       <template v-if="isComparing && row._compareData?.length">
                         <template v-for="(cd, ci) in row._compareData" :key="ci">
-                          <span v-if="cd">
-                            <span v-if="ci > 0"> / </span>
-                            <span :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitPDFormat }}</span>
-                          </span>
+                          <span v-if="ci > 0"> / </span>
+                          <span v-if="cd" :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitPDFormat }}</span>
+                          <span v-else class="color-gray-500" title="该预设的榜单未包含此物品">—</span>
                         </template>
                       </template>
                       <span v-else style="word-break:break-all;display:inline-block;max-width:200px">{{ row.result.profitPDFormat }}</span>&nbsp;
@@ -662,7 +687,9 @@ const onPriceStatusChange = usePriceStatus("dashboard-price-status")
                   <template #default="{ row }">
                     <template v-if="isComparing && row._compareData?.length">
                       <template v-for="(cd, ci) in row._compareData" :key="ci">
-                        <span v-if="cd"><span v-if="ci > 0"> / </span><span :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitPHFormat }}</span></span>
+                        <span v-if="ci > 0"> / </span>
+                        <span v-if="cd" :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitPHFormat }}</span>
+                        <span v-else class="color-gray-500" title="该预设的榜单未包含此物品">—</span>
                       </template>
                     </template><span v-else style="word-break:break-all;display:inline-block;max-width:180px">{{ row.result.profitPHFormat }}</span>
                   </template>
@@ -671,10 +698,9 @@ const onPriceStatusChange = usePriceStatus("dashboard-price-status")
                   <template #default="{ row }">
                     <template v-if="isComparing && row._compareData?.length">
                       <template v-for="(cd, ci) in row._compareData" :key="ci">
-                        <span v-if="cd">
-                          <span v-if="ci > 0"> / </span>
-                          <span :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitRateFormat }}</span>
-                        </span>
+                        <span v-if="ci > 0"> / </span>
+                        <span v-if="cd" :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.profitRateFormat }}</span>
+                        <span v-else class="color-gray-500" title="该预设的榜单未包含此物品">—</span>
                       </template>
                     </template>
                     <span v-else>{{ row.result.profitRateFormat }}</span>
@@ -710,10 +736,9 @@ const onPriceStatusChange = usePriceStatus("dashboard-price-status")
                       <div>
                         <template v-if="isComparing && row._compareData?.length">
                           <template v-for="(cd, ci) in row._compareData" :key="ci">
-                            <span v-if="cd">
-                              <span v-if="ci > 0"> / </span>
-                              <span :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.expPHFormat }}</span>
-                            </span>
+                            <span v-if="ci > 0"> / </span>
+                            <span v-if="cd" :style="{ color: ['#409eff', '#e6a23c', '#16ab1b', '#f56c6c', '#909399'][ci % 5] }">{{ cd.result.expPHFormat }}</span>
+                            <span v-else class="color-gray-500" title="该预设的榜单未包含此物品">—</span>
                           </template>
                         </template>
                         <span v-else>{{ row.result.expPHFormat }}</span>

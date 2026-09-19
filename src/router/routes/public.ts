@@ -91,6 +91,23 @@ export const publicRoutes: RouteRecordRaw[] = [
   {
     path: "/",
     component: Layouts,
+    redirect: "/jungle",
+    children: [
+      {
+        path: "jungle",
+        component: () => import("@/pages/jungle/index.vue"),
+        name: "Jungle",
+        meta: {
+          title: t("打野工具"),
+          affix: false,
+          elIcon: "Compass"
+        }
+      }
+    ]
+  },
+  {
+    path: "/",
+    component: Layouts,
     redirect: "/philosopher",
     children: [
       {
@@ -108,22 +125,12 @@ export const publicRoutes: RouteRecordRaw[] = [
   {
     path: "/",
     component: Layouts,
-    redirect: "/jungle",
+    redirect: "/junglerit",
     meta: {
       title: t("强化工具"),
       elIcon: "Compass"
     },
     children: [
-      {
-        path: "jungle",
-        component: () => import("@/pages/jungle/index.vue"),
-        name: "Jungle",
-        meta: {
-          title: t("打野工具"),
-          affix: false,
-          elIcon: "Compass"
-        }
-      },
       {
         path: "junglerit",
         component: () => import("@/pages/junglest/inherit.vue"),

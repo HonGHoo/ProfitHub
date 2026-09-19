@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import PolokikiBadge from "@@/components/PolokikiBadge/index.vue"
 import { announcementConfig, dismissAnnouncement, shouldShowAnnouncement } from "@@/config/announcement"
 
 const { t } = useI18n()
@@ -21,7 +22,10 @@ function handleClose() {
     <div v-if="visible" class="announcement-overlay" @click.self="handleClose">
       <div class="announcement-modal">
         <div class="announcement-text">
-          <span class="announcement-title">{{ t(announcementConfig.message.title) }}</span>
+          <span class="announcement-title">
+            {{ t(announcementConfig.message.title) }}
+            <PolokikiBadge />
+          </span>
           <span class="announcement-message">{{ t(announcementConfig.message.content) }}</span>
           <a
             v-if="announcementConfig.link"

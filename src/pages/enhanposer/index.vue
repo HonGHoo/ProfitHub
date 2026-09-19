@@ -59,6 +59,8 @@ const ldSearchData = useMemory("enhanposer-leaderboard-search-data", {
 })
 
 const loadingLD = ref(false)
+/** 首轮计算进度（-1 = 命中缓存/不在计算）；分片计算让出主线程，进度条保持流动 */
+const calcProgress = ref(-1)
 const getLeaderboardData = debounce(() => {
   loadingLD.value = true
   getEnhanposerDataApi({
@@ -66,6 +68,8 @@ const getLeaderboardData = debounce(() => {
     size: paginationDataLD.pageSize,
     ...ldSearchData.value,
     sort: sortLD.value
+  }, (pct) => {
+    calcProgress.value = pct
   }).then((data) => {
     paginationDataLD.total = data.total
     leaderboardData.value = data.list
@@ -74,6 +78,7 @@ const getLeaderboardData = debounce(() => {
     leaderboardData.value = []
   }).finally(() => {
     loadingLD.value = false
+    calcProgress.value = -1
   })
 }, 300)
 function handleSearchLD() {
@@ -294,6 +299,9 @@ const { t } = useI18n()
                 {{ t("退出对比") }}
               </el-button>
             </div>
+            <div v-if="calcProgress >= 0" style="margin-bottom:10px">
+              <el-progress :percentage="calcProgress" :stroke-width="14" striped striped-flow :show-text="true" />
+            </div>
             <el-table :data="displayLeaderboardData" v-loading="loadingLD" @sort-change="handleSortLD">
               <el-table-column width="54" fixed="left">
                 <template #default="{ row }">
@@ -304,10 +312,10 @@ const { t } = useI18n()
               <el-table-column min-width="70">
                 <template #default="{ row }">
                   <div style="display:flex;">
-                    <ItemIcon v-if="row.calculatorList && row.calculatorList[0].protectLevel < row.calculatorList[0].enhanceLevel" :hrid="row.calculatorList[0].protectionItem.hrid" />
+                    <ItemIcon v-if="row.calculatorList?.[0] && row.calculatorList[0].protectLevel < row.calculatorList[0].enhanceLevel" :hrid="row.calculatorList[0].protectionItem?.hrid" />
                     <ItemIcon v-if="row.catalyst" :hrid="`/items/${row.catalyst}`" />
                   </div>
-                  <div v-if="row.calculatorList && row.calculatorList[0].protectLevel < row.calculatorList[0].enhanceLevel">
+                  <div v-if="row.calculatorList?.[0] && row.calculatorList[0].protectLevel < row.calculatorList[0].enhanceLevel">
                     {{ t('从{0}保护', [row.calculatorList[0].protectLevel]) }}
                   </div>
                 </template>

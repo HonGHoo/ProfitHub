@@ -36,6 +36,8 @@ export interface UpgradeCandidate {
   paybackHours: number
   /** 现装售卖价（卖价侧口径，无买单价为 0），开售卖抵扣时回本按净支出计 */
   oldSellPrice?: number
+  /** true=超出单件预算上限，不参与推荐（显示全部候选时灰显） */
+  overBudget?: boolean
   /** 逐项目换装前后数值（行展开详情用） */
   projects?: { hrid: string, name: string, profitBefore: number, profitAfter: number, expBefore: number, expAfter: number }[]
 }
@@ -85,6 +87,8 @@ export interface UpgradeCompareParams {
   baselineOverrides?: Record<string, string[]>
   /** 回本计入卖旧装抵扣：净支出 = 购买成本 − 现装售卖价，默认 false */
   sellOff?: boolean
+  /** 单件支出上限（金币）：开 sellOff 按净支出比，否则按购买成本；超预算候选不进推荐（仍留在候选列表标记展示） */
+  budget?: number
   onProgress?: (label: string, current: number, total: number) => void
 }
 
@@ -187,7 +191,8 @@ function findTopProjects(action: Action): { all: BaselineProject[], perKind: Bas
           if (cal.actionLevel > playerLevel) continue
           cal.run()
           const profitPH = cal.result?.profitPH
-          if (typeof profitPH !== "number" || profitPH <= 0) continue
+          // NaN 会溜过 <=0 判断（NaN<=0 为 false），必须用 isFinite 拦
+          if (typeof profitPH !== "number" || !Number.isFinite(profitPH) || profitPH <= 0) continue
           const proj = { kind, hrid: item.hrid, catalystRank, profitPH, expPH: cal.result.expPH }
           const prev = bestByHrid.get(item.hrid)
           if (!prev || profitPH > prev.profitPH) {
@@ -218,6 +223,8 @@ function getBaseMaterialHridsOf(action: Action): Set<string> {
   const outputs = new Set<string>()
   for (const detail of Object.values(getGameDataApi().actionDetailMap)) {
     if (!detail.hrid.startsWith(prefix)) continue
+    // 采集类条目（挤奶/采摘/伐木/战斗等）没有配方输入输出，跳过
+    if (!Array.isArray(detail.inputItems) || !Array.isArray(detail.outputItems)) continue
     for (const input of detail.inputItems) inputs.add(input.itemHrid)
     for (const output of detail.outputItems) outputs.add(output.itemHrid)
   }
@@ -234,6 +241,7 @@ function runBaselineCalc(kind: CalcKind, hrid: string, action: Action, catalystR
     if (!cal.available) return null
     cal.run()
     if (!cal.result) return null
+    if (!Number.isFinite(cal.result.profitPH) || !Number.isFinite(cal.result.expPH)) return null
     return { profitPH: cal.result.profitPH, expPH: cal.result.expPH }
   } catch {
     return null
@@ -375,9 +383,9 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
         actionResult.current[slot] = currentEq?.hrid
           ? { hrid: currentEq.hrid, name: itemDisplayName(currentEq.hrid), level: currentLevel }
           : undefined
-        // 现装售卖价（卖价侧口径）：换装后旧装备卖掉回血，无买单价记 0
+        // 现装售卖价（卖价侧口径）：换装后旧装备卖掉回血，无买单价记 0（bid 为 NaN 时同样记 0，防净支出算出 NaN）
         const oldSellPrice = currentEq?.hrid
-          ? Math.max(0, getPriceOf(currentEq.hrid, currentLevel).bid)
+          ? Math.max(0, Number.isFinite(getPriceOf(currentEq.hrid, currentLevel).bid) ? getPriceOf(currentEq.hrid, currentLevel).bid : 0)
           : 0
 
         let candidateList: ItemDetail[] = []
@@ -402,7 +410,7 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
             // 跳过与现装完全相同的（同物品同强化等级）；同款低强化也不考虑（若被评估为提升，多半是现装等级数据缺失）
             if (sameHrid && level <= currentLevel) continue
             const cost = getPriceOf(cand.hrid, level).ask
-            if (typeof cost !== "number" || cost <= 0) continue
+            if (typeof cost !== "number" || !Number.isFinite(cost) || cost <= 0) continue
 
             const swappedConfig = isSpecialSlot(slot)
               ? withSpecialSwapped(preset.config, slot, cand.hrid, level)
@@ -413,10 +421,11 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
             // 护符恒按经验口径；其他部位利润无提升但经验有提升时回退经验口径（如纯经验向特殊装备）
             const isExpMetric = slot === "charm" || (delta.profitDelta <= 0 && delta.expDelta > 0)
             const metric = isExpMetric ? delta.expDelta : delta.profitDelta
-            if (metric <= 0) continue
+            if (!Number.isFinite(metric) || metric <= 0) continue
 
             // 回本按净支出计：开售卖抵扣时扣掉旧装卖价（净支出可为 0 = 即刻回本）
             const netCost = params.sellOff ? Math.max(0, cost - oldSellPrice) : cost
+            const overBudget = params.budget != null && netCost > params.budget
 
             actionResult.candidates.push({
               slot,
@@ -431,6 +440,7 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
               valueRate: metric / cost,
               paybackHours: isExpMetric ? Number.POSITIVE_INFINITY : netCost / delta.profitDelta,
               oldSellPrice,
+              ...(overBudget ? { overBudget: true } : {}),
               projects: delta.projects.map(p => ({ ...p, name: itemDisplayName(p.hrid) }))
             })
           }
@@ -440,6 +450,7 @@ export async function getUpgradeCompareApi(params: UpgradeCompareParams): Promis
       // 利润口径行排前，经验口径行排后；同口径按性价比降序
       actionResult.candidates.sort((a, b) => (Number(a.isExpMetric) - Number(b.isExpMetric)) || (b.valueRate - a.valueRate))
       for (const cand of actionResult.candidates) {
+        if (cand.overBudget) continue
         if (!actionResult.best[cand.slot]) {
           actionResult.best[cand.slot] = cand
         }

@@ -32,6 +32,8 @@ const ldSearchData = useMemory("enhanposest-leaderboard-search-data", {
 })
 
 const loadingLD = ref(false)
+/** 首轮计算进度（-1 = 命中缓存/不在计算）；分片计算让出主线程，进度条保持流动 */
+const calcProgress = ref(-1)
 const getLeaderboardData = debounce(() => {
   loadingLD.value = true
   getEnhanposestDataApi({
@@ -39,6 +41,8 @@ const getLeaderboardData = debounce(() => {
     size: paginationDataLD.pageSize,
     ...ldSearchData.value,
     sort: sortLD.value
+  }, (pct) => {
+    calcProgress.value = pct
   }).then((data) => {
     paginationDataLD.total = data.total
     leaderboardData.value = data.list
@@ -47,6 +51,7 @@ const getLeaderboardData = debounce(() => {
     leaderboardData.value = []
   }).finally(() => {
     loadingLD.value = false
+    calcProgress.value = -1
   })
 }, 300)
 function handleSearchLD() {
@@ -133,6 +138,12 @@ const { t } = useI18n()
             </el-form>
           </template>
           <template #default>
+            <div v-if="calcProgress >= 0" style="margin-bottom:10px">
+              <el-progress :percentage="calcProgress" :stroke-width="14" striped striped-flow :show-text="true" />
+              <div style="color:var(--el-text-color-secondary);font-size:12px;margin-top:4px">
+                首轮全市场强化方案计算中，进度条走完即出榜；本会话内再次进入秒开。
+              </div>
+            </div>
             <el-table :data="leaderboardData" v-loading="loadingLD" @sort-change="handleSortLD">
               <el-table-column width="54" fixed="left">
                 <template #default="{ row }">
@@ -143,11 +154,11 @@ const { t } = useI18n()
               <el-table-column min-width="90">
                 <template #default="{ row }">
                   <div style="display:flex;">
-                    <ItemIcon v-if="row.calculatorList && row.calculatorList[0].protectLevel < row.calculatorList[0].enhanceLevel" :hrid="row.calculatorList[0].protectionItem.hrid" />
+                    <ItemIcon v-if="row.calculatorList && row.calculatorList?.[0]?.protectLevel < row.calculatorList?.[0]?.enhanceLevel" :hrid="row.calculatorList?.[0]?.protectionItem.hrid" />
                     <ItemIcon v-if="row.catalyst" :hrid="`/items/${row.catalyst}`" />
                   </div>
-                  <div v-if="row.calculatorList && row.calculatorList[0].protectLevel < row.calculatorList[0].enhanceLevel">
-                    {{ t('从{0}保护', [row.calculatorList[0].protectLevel]) }}
+                  <div v-if="row.calculatorList && row.calculatorList?.[0]?.protectLevel < row.calculatorList?.[0]?.enhanceLevel">
+                    {{ t('从{0}保护', [row.calculatorList?.[0]?.protectLevel]) }}
                   </div>
                 </template>
               </el-table-column>
@@ -155,7 +166,7 @@ const { t } = useI18n()
 
               <el-table-column :label="t('逃逸')" min-width="60">
                 <template #default="{ row }">
-                  {{ row.calculatorList[0].realEscapeLevel }}
+                  {{ row.calculatorList?.[0]?.realEscapeLevel }}
                 </template>
               </el-table-column>
 
@@ -169,7 +180,6 @@ const { t } = useI18n()
                   </el-link>
                 </template>
               </el-table-column>
-              Z
               <el-table-column align="center" min-width="120">
                 <template #header>
                   <div style="display: flex; justify-content: center; align-items: center; gap: 5px">
@@ -186,7 +196,7 @@ const { t } = useI18n()
                 </template>
                 <template #default="{ row }">
                   <span>
-                    {{ row.calculatorList[0].result.cost4EnhancePHFormat }}
+                    {{ row.calculatorList?.[0]?.result.cost4EnhancePHFormat }}
                   </span>
                 </template>
               </el-table-column>
@@ -251,7 +261,7 @@ const { t } = useI18n()
               <el-table-column :label="t('买价')" align="center">
                 <template #default="{ row }">
                   <span>
-                    {{ Format.price(row.calculatorList[0].ingredientListWithPrice[0].price) }}
+                    {{ Format.price(row.calculatorList?.[0]?.ingredientListWithPrice?.[0]?.price ?? -1) }}
                   </span>
                 </template>
               </el-table-column>
@@ -271,7 +281,7 @@ const { t } = useI18n()
                   </div>
                 </template>
                 <template #default="{ row }">
-                  {{ row.calculatorList[0].result.targetRateFormat }}
+                  {{ row.calculatorList?.[0]?.result.targetRateFormat }}
                 </template>
               </el-table-column>
 

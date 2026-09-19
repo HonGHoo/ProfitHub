@@ -140,7 +140,11 @@ function syncCommunityBuffsFromLive() {
   }
 }
 function onLiveBuffToggle(value: string | number | boolean) {
-  if (value) syncCommunityBuffsFromLive()
+  if (value) {
+    syncCommunityBuffsFromLive()
+    // 开开关立即补拉一次实时数据，最多 60s 的轮询等待对首开体验太钝
+    void gameStore.pollRealtime()
+  }
 }
 const liveBuffsHint = computed(() => {
   const live = gameStore.communityBuffsLive
@@ -484,8 +488,7 @@ const COMMUNITY_BUFF_HRID_TO_TYPE: Record<string, CommunityBuff> = {
   "/community_buff_types/moo_card": "moo_card",
   "/community_buff_types/experience": "experience",
   "/community_buff_types/gathering_quantity": "gathering_quantity",
-  "/community_buff_types/production_efficiency": "production_efficiency",
-  "/community_buff_types/enhancing_speed": "enhancing_speed"
+  "/community_buff_types/production_efficiency": "production_efficiency"
 }
 
 // 检查装备是否对某个技能生效
@@ -503,6 +506,16 @@ async function onClipboardImport() {
   try {
     // 1. 从 localStorage 读取 Tampermonkey 写入的数据
     let text = localStorage.getItem("milkonomy_last_export") || ""
+    // 桥接缓存过期检查：插件关闭后旧数据会一直留在 localStorage，超过 2 小时视为失效，
+    // 继续走剪贴板兜底，避免静默导入一份数小时前的旧快照
+    if (text) {
+      try {
+        const exportedAt = JSON.parse(text)?.exportedAt
+        if (!exportedAt || Date.now() - new Date(exportedAt).getTime() > 2 * 3600_000) text = ""
+      } catch {
+        text = ""
+      }
+    }
 
     // 2. 备选：读剪贴板
     if (!text || !text.trim()) {
@@ -512,7 +525,7 @@ async function onClipboardImport() {
     }
 
     if (!text || !text.trim()) {
-      ElMessageBox.alert("<p>检测到未安装数据导出脚本。</p><p style=\"margin-top:8px\">📥 <a href=\"https://greasyfork.org/zh-CN/scripts/587094\" target=\"_blank\">安装脚本</a>（已装请更新到 3.1.1+）</p><p style=\"margin-top:8px;color:#909399\">安装后刷新 MilkyWay Idle 页面进一次游戏，再回利润网点「一键导入」。</p>", t("未安装脚本"), { dangerouslyUseHTMLString: true, confirmButtonText: t("知道了") })
+      ElMessageBox.alert("<p>检测到未安装数据导出脚本。</p><p style=\"margin-top:8px\">📥 <a href=\"https://greasyfork.org/zh-CN/scripts/587094\" target=\"_blank\" style=\"color:#409eff;text-decoration:underline;font-weight:600\">安装脚本</a>（已装请更新到 3.1.1+）</p><p style=\"margin-top:8px;color:#909399\">安装后刷新 MilkyWay Idle 页面进一次游戏，再回利润网点「一键导入」。</p>", t("未安装脚本"), { dangerouslyUseHTMLString: true, confirmButtonText: t("知道了") })
       return
     }
     // 剪贴板兜底可能读到任意文本（网址/普通文字），先挡掉再进 JSON 解析，避免误导性的"导入失败"
@@ -769,6 +782,10 @@ function processImportData(jsonStr: string, shouldMerge: boolean, mergeTargetInd
             level: level as number
           })
         }
+      }
+      // 神龛完整性提示：快照缺座会被按等级0处理（插件WS字段不稳定/DOM没抓到），提醒重新导出
+      if (shrineBuffMap.size < 5) {
+        ElMessage.warning(t("神龛数据不完整（{0}/5），缺失的按等级0计算；请在游戏内打开公会页面待其加载后重新导出（插件3.1.2+已修复，无公会可忽略）", [String(shrineBuffMap.size)]))
       }
 
       // 构建 action config
@@ -1069,6 +1086,12 @@ function processImportData(jsonStr: string, shouldMerge: boolean, mergeTargetInd
         const oldShrine = existing.shrineBuffMap.get(type)
         if (oldShrine) newShrine.level = Math.max(newShrine.level, oldShrine.level)
       }
+      // 导入缺座时保留原预设值（合并语义=取优，缺的不清零）
+      for (const [type, oldShrine] of existing.shrineBuffMap) {
+        if (!config.shrineBuffMap.has(type)) {
+          config.shrineBuffMap.set(type, { ...oldShrine })
+        }
+      }
 
       // 成就Buff：任一有则启用
       for (const [tier, newAch] of config.achievementBuffMap) {
@@ -1240,7 +1263,7 @@ function getAchievementEffect(type: AchievementTier) {
             <div class=" mr-3 mb-2">
               {{ t('预设名称') }}:
             </div>
-            <el-input class=" w-300px" :maxlength="20" v-model="name" />
+            <el-input class=" w-300px max-w-full" :maxlength="20" v-model="name" />
             <el-button type="success" plain class="ml-4" @click="onImport">
               {{ t('导入') }}
             </el-button>
@@ -1677,5 +1700,16 @@ function getAchievementEffect(type: AchievementTier) {
 .el-dialog__body {
   max-height: 75vh;
   overflow-y: auto;
+}
+
+/* 手机档：弹窗近全宽，内容区占满可用高度 */
+@media (max-width: 820px) {
+  .el-dialog {
+    width: 94% !important;
+  }
+
+  .el-dialog__body {
+    max-height: 80vh;
+  }
 }
 </style>

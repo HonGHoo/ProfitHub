@@ -1,11 +1,77 @@
 <script setup lang="ts">
+import PolokikiBadge from "@@/components/PolokikiBadge/index.vue"
 import { useI18n } from "vue-i18n"
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 </script>
 
 <template>
   <div class="changelog-page">
+    <h2 class="changelog-header">
+      {{ t("更新日志") }}<PolokikiBadge />
+    </h2>
+    <!-- ================== v2.8.1 ================== -->
+    <details open>
+      <summary style="cursor:pointer;font-weight:bold;font-size:18px;margin:16px 0 8px">
+        v2.8.1 — 2026-09-16
+      </summary>
+      <div style="padding-left:16px">
+        <template v-if="locale !== 'en'">
+          <p><strong>一、修复（重要）</strong></p>
+          <ol>
+            <li>强化分解 / 超级强化：修复更换配装后数据不更新（旧缓存锁死）与偶发页面崩溃；两页首轮计算均改为分片进行并显示进度条，不再卡死界面，同一会话内再次进入即时显示。</li>
+            <li>首页对比：修复预设列大量显示「—」——对比数据此前只取预设榜单的分页切片+搜索过滤（预设里时薪/利润率不达标的物品被滤掉），现改为全量比对，任意行都能显示预设对比数值；点击列头排序时列表崩溃/空白同步修复。</li>
+            <li>实时社区Buff：修复「实时数据未就绪」长时间不恢复的问题（空数据退避从 1 小时缩短为 3 分钟）；打开开关立即拉取一次。</li>
+            <li>贤者之石：来源买价改为全部强化等级取最低卖单，修复「市场实际买得到却显示无单」；价差改为省钱口径：市场买价 − 单颗净成本，绿色 = 自己做一颗比直接买省多少。</li>
+            <li>一键导入：剪贴板兜底读到无关内容时给出明确指引（原先误报「导入失败」）；「安装脚本」链接改为官方直链并高亮显示。</li>
+            <li>装备优化：修复选择采集专业（挤奶/采摘/伐木）点击「开始优化」时的页面崩溃；修复炼金在个别市场数据下显示 NaN 的问题。</li>
+            <li>一键导入：插件关闭后桥接缓存超过 2 小时自动失效，不再静默导入旧快照。</li>
+            <li>社区Buff：下线游戏已移除的「强化速度」条目；实时等级超过 12 小时无人上报自动过期，回退预设手动值。</li>
+            <li>全局错误提示附带源码位置，便于反馈问题。</li>
+            <li>一键导入/神龛：修复导入快照神龛缺座时被静默按等级0处理——现在会提示「神龛数据不完整（X/5）」；「数据升级」合并导入缺座时保留原预设值不再清零；根因（插件采集丢失）由插件 3.1.2 修复：神龛等级持久记忆补缺 + 公会面板长驻监听。</li>
+            <li>菜单：「打野工具」提升为独立入口，排在「贤者镜计算」上方。</li>
+          </ol>
+          <p><strong>二、装备优化新功能：预算上限</strong></p>
+          <ol>
+            <li>配置区新增「预算上限」（单位 M，百万金币）：单件支出超出预算的装备不再被推荐，全部超预算的部位显示「预算内无候选」。</li>
+            <li>开「卖旧装抵扣」时按净支出（成本−现装卖价）与预算比较；开「显示全部候选」可看到超预算项（灰显+「超预算」标记）。</li>
+          </ol>
+          <p><strong>三、首页新功能：最高利润步骤</strong></p>
+          <ol>
+            <li>锻造/制造/裁缝筛选区新增「最高利润步骤」勾选：同一产物的多条步数路径（1步买料 / 2步…N步火车）只保留利润/h 最高的一条。</li>
+            <li>品牌标识：首页版本号、公告与更新日志署名换用游戏同款小鸭图标 + 渐变绿名字。</li>
+          </ol>
+        </template>
+        <template v-else>
+          <p><strong>1. Fixes (important)</strong></p>
+          <ol>
+            <li>Enhance-decompose / Super enhance: results no longer locked to stale cache after switching presets; random render crashes fixed. Both pages now compute in chunks with a progress bar instead of freezing the page; instant on re-entry within the same session.</li>
+            <li>Homepage compare: fixed compare columns mostly showing "—" — compare data used to come from the preset leaderboard's page slice plus search filters (items under the rate threshold got filtered out of that preset's column); it now joins against the full list so every row shows the preset's numbers. Column-sort crash/blank also fixed.</li>
+            <li>Live community buffs: "data not ready" no longer sticks for an hour (empty-data backoff shortened to 3 minutes); toggling the switch triggers an immediate fetch.</li>
+            <li>Philosopher's stone: source buy prices now take the lowest ask across all enhancement levels (items were wrongly shown as "no listing"); the spread is now savings-caliber: market ask − net cost per stone (green = how much you save by crafting it yourself).</li>
+            <li>1-click import: clear guidance when the clipboard fallback picks up unrelated text (was misreported as "import failed"); install-script link switched to the official one and highlighted.</li>
+            <li>Equipment optimizer: fixed a crash when running optimization for gathering skills (milking / foraging / woodcutting); fixed occasional NaN display for alchemy under bad market data.</li>
+            <li>1-click import: the bridge cache expires after 2 hours once the userscript is off — no more silent imports of stale snapshots.</li>
+            <li>Community buffs: removed the "Enhancing Speed" entry retired from the game; live levels auto-expire after 12 hours without a report and fall back to manual preset values.</li>
+            <li>Global error toast now includes the source location for easier bug reports.</li>
+            <li>1-click import / shrines: a snapshot with missing shrines is no longer silently treated as level 0 — you now get an "incomplete (X/5)" hint, and merging into a preset keeps the old values for missing shrines. Root cause (capture loss in the userscript) is fixed in plugin 3.1.2: persistent shrine-level memory plus an always-on guild-panel watcher.</li>
+            <li>Menu: Jungle Tools promoted to a standalone entry, right above Sage Mirror Calc.</li>
+          </ol>
+          <p><strong>2. New: budget cap in the equipment optimizer</strong></p>
+          <ol>
+            <li>New "Budget cap" input (unit: M, millions): items whose per-piece spend exceeds the cap are no longer recommended; slots with every candidate over budget show "no candidate within budget".</li>
+            <li>With "sell old gear" on, the net spend (cost − old gear sale) is compared against the cap; "show all candidates" lists over-budget rows grayed out with a tag.</li>
+          </ol>
+          <p><strong>3. New: top-profit step on the homepage</strong></p>
+          <ol>
+            <li>New "Top-Profit Step" checkbox in the smithing/crafting/tailoring filter area: when a product has multiple step paths (1-step buy-materials / 2-step…N-step trains), only the one with the highest profit/h is kept.</li>
+            <li>Branding: homepage version tag, announcement and changelog signature now use the in-game duckling icon with the gradient-green name.</li>
+          </ol>
+        </template>
+      </div>
+    </details>
+
+    <hr>
     <!-- ================== v2.8.0 ================== -->
     <details open>
       <summary style="cursor:pointer;font-weight:bold;font-size:18px;margin:16px 0 8px">

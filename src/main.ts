@@ -26,7 +26,9 @@ const app = createApp(App)
 app.config.errorHandler = (err, _instance, info) => {
   console.error("[全局错误]", info, err)
   const detail = err instanceof Error ? err.message : String(err)
-  ElMessage.error(`页面发生错误：${info} ${detail}（请刷新重试）`)
+  // 附上首个业务代码帧（src/ 文件:行号），玩家只截弹窗也能定位到源码位置
+  const frame = err instanceof Error && err.stack ? (err.stack.split("\n").find(l => l.includes("/src/")) || "").trim().replace(/\?.*$/, "").slice(0, 140) : ""
+  ElMessage.error({ message: `页面发生错误：${info} ${detail}（请刷新重试；反馈请截图 F12 控制台${frame ? `<br><span style="opacity:.7">${frame}</span>` : ""}）`, duration: 8000, dangerouslyUseHTMLString: true })
 }
 
 // 安装插件（全局组件、自定义指令等）
