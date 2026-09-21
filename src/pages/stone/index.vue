@@ -10,7 +10,7 @@ import { computeStoneLeaderboard, type StoneLeaderboardResult, type StoneSourceR
 import { getGameDataApi, getItemDetailOf } from "@/common/apis/game"
 import { usePriceStatus } from "@/common/composables/usePriceStatus"
 import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
-import { useGameStore } from "@/pinia/stores/game"
+import { PriceStatus, useGameStore } from "@/pinia/stores/game"
 import { usePlayerStore } from "@/pinia/stores/player"
 import ActionConfig from "../dashboard/components/ActionConfig.vue"
 import GameInfo from "../dashboard/components/GameInfo.vue"
@@ -22,6 +22,8 @@ const catalystRank = useMemory("stone-catalyst-rank", -1)
 const includeTax = useMemory("stone-include-tax", true)
 const includeRare = useMemory("stone-include-rare", true)
 const craftMode = useMemory("stone-craft-mode", false)
+const materialPriceStatusOverrides = useMemory("stone-material-price-status-overrides", {} as Record<string, Record<string, PriceStatus>>, 0)
+const GLOBAL_PRICE_STATUS = "GLOBAL"
 
 const onPriceStatusChange = usePriceStatus("stone-price-status")
 function handlePriceStatusChange() {
@@ -45,6 +47,13 @@ const stoneBidAfterTax = computed(() => {
 })
 
 const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
+const materialPriceStatusOptions = computed<Array<{ value: PriceStatus | typeof GLOBAL_PRICE_STATUS, label: string }>>(() => [
+  { value: GLOBAL_PRICE_STATUS, label: t("跟随") },
+  { value: PriceStatus.ASK, label: t("左") },
+  { value: PriceStatus.ASK_LOW, label: `${t("左")}-` },
+  { value: PriceStatus.BID, label: t("右") },
+  { value: PriceStatus.BID_HIGH, label: `${t("右")}+` }
+])
 
 function cancelCostHide() {
   if (costHideTimer) clearTimeout(costHideTimer)
@@ -82,10 +91,38 @@ function actionLabel(action: string) {
   return action === "cheesesmithing" ? t("锻造") : action === "tailoring" ? t("裁缝") : t("制造")
 }
 
-function priceSourceLabel(source: string) {
+function priceStatusLabel(status: PriceStatus) {
+  if (status === PriceStatus.ASK_LOW) return `${t("左")}-`
+  if (status === PriceStatus.BID) return t("右")
+  if (status === PriceStatus.BID_HIGH) return `${t("右")}+`
+  return t("左")
+}
+
+function priceSourceLabel(source: string, status: PriceStatus) {
   if (source === "shop") return t("商店固定价")
   if (source === "craft") return t("制造价回退")
-  return t("市场卖单")
+  return `${t("市场价")} · ${priceStatusLabel(status)}`
+}
+
+function materialPriceStatusOf(sourceHrid: string, materialHrid: string): PriceStatus | typeof GLOBAL_PRICE_STATUS {
+  return materialPriceStatusOverrides.value[sourceHrid]?.[materialHrid] ?? GLOBAL_PRICE_STATUS
+}
+
+function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status: PriceStatus | typeof GLOBAL_PRICE_STATUS) {
+  const next = { ...materialPriceStatusOverrides.value }
+  const sourceOverrides = { ...(next[sourceHrid] ?? {}) }
+  if (status === GLOBAL_PRICE_STATUS) {
+    delete sourceOverrides[materialHrid]
+  } else {
+    sourceOverrides[materialHrid] = status
+  }
+  if (Object.keys(sourceOverrides).length) next[sourceHrid] = sourceOverrides
+  else delete next[sourceHrid]
+  materialPriceStatusOverrides.value = next
+}
+
+function hasCustomMaterialPrice(sourceHrid: string) {
+  return Object.keys(materialPriceStatusOverrides.value[sourceHrid] ?? {}).length > 0
 }
 
 function materialCountText(row: StoneSourceRow, index: number) {
@@ -124,7 +161,8 @@ function compute() {
       catalystRank: catalystRank.value,
       sellTaxFactor: includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR,
       includeRare: includeRare.value,
-      craftMode: craftMode.value
+      craftMode: craftMode.value,
+      materialPriceStatusOverrides: materialPriceStatusOverrides.value
     })
   } catch (e) {
     console.error(e)
@@ -137,6 +175,7 @@ watch([catalystRank, includeTax, includeRare, craftMode], compute, { immediate: 
 watch(() => gameStore.marketData?.timestamp, () => compute())
 watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
 watch(() => playerStore.config, () => compute(), { deep: true })
+watch(materialPriceStatusOverrides, () => compute(), { deep: true })
 </script>
 
 <template>
@@ -211,7 +250,7 @@ watch(() => playerStore.config, () => compute(), { deep: true })
             <el-popover
               :visible="isCostPopoverVisible(row.hrid)"
               placement="right-start"
-              :width="500"
+              :width="760"
               :persistent="true"
             >
               <template #reference>
@@ -227,6 +266,7 @@ watch(() => playerStore.config, () => compute(), { deep: true })
                 >
                   <ItemIcon :hrid="row.hrid" :width="20" :height="20" />
                   <span>{{ itemName(row.hrid) }}</span>
+                  <span v-if="hasCustomMaterialPrice(row.hrid)" class="custom-price-marker">[{{ t('自') }}]</span>
                 </span>
               </template>
               <div
@@ -253,6 +293,7 @@ watch(() => playerStore.config, () => compute(), { deep: true })
                     <span>{{ t('折算数量') }}</span>
                     <span>{{ t('单价') }}</span>
                     <span>{{ t('小计') }}</span>
+                    <span>{{ t('选价') }}</span>
                   </div>
                   <div v-for="(item, index) in row.craftBreakdown.items" :key="`${item.hrid}-${index}`" class="cost-grid cost-grid-row">
                     <span class="flex items-center gap-1 min-w-0">
@@ -262,9 +303,20 @@ watch(() => playerStore.config, () => compute(), { deep: true })
                     <span>{{ materialCountText(row, index) }}</span>
                     <span>
                       {{ Format.money(item.unitPrice) }}
-                      <small class="block color-gray-400">{{ priceSourceLabel(item.priceSource) }}</small>
+                      <small class="block color-gray-400">{{ priceSourceLabel(item.priceSource, item.priceStatus) }}</small>
                     </span>
                     <span>{{ Format.money(item.subtotal) }}</span>
+                    <span class="price-status-buttons">
+                      <el-button
+                        v-for="option in materialPriceStatusOptions"
+                        :key="option.value"
+                        size="small"
+                        :type="materialPriceStatusOf(row.hrid, item.hrid) === option.value ? (option.value === GLOBAL_PRICE_STATUS ? 'primary' : 'success') : ''"
+                        @click="setMaterialPriceStatus(row.hrid, item.hrid, option.value)"
+                      >
+                        {{ option.label }}
+                      </el-button>
+                    </span>
                   </div>
                   <div class="flex justify-end items-center gap-3 mt-2 font-bold">
                     <span>{{ t('合计') }}</span>
@@ -396,9 +448,17 @@ watch(() => playerStore.config, () => compute(), { deep: true })
   border-bottom: 1px dashed var(--el-color-primary-light-3);
 }
 
+.custom-price-marker {
+  color: var(--el-color-success);
+  font-weight: 700;
+}
+
 .cost-grid {
   display: grid;
-  grid-template-columns: minmax(135px, 1.4fr) minmax(120px, 1.2fr) minmax(90px, 1fr) minmax(80px, 0.9fr);
+  grid-template-columns: minmax(130px, 1.35fr) minmax(115px, 1.15fr) minmax(90px, 0.9fr) minmax(80px, 0.8fr) minmax(
+      225px,
+      1.7fr
+    );
   column-gap: 10px;
   align-items: center;
 }
@@ -415,5 +475,19 @@ watch(() => playerStore.config, () => compute(), { deep: true })
   padding: 4px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   font-size: 13px;
+}
+
+.price-status-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.price-status-buttons :deep(.el-button) {
+  min-width: 38px;
+  padding-inline: 7px;
+}
+
+.price-status-buttons :deep(.el-button + .el-button) {
+  margin-left: 3px;
 }
 </style>

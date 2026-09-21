@@ -6,7 +6,7 @@ import { CoinifyCalculator, DecomposeCalculator, TransmuteCalculator } from "@/c
 import { getGameDataApi, getItemDetailOf, getPriceOf } from "@/common/apis/game"
 import { getCraftCostOf, getMaterialCostBreakdownOf } from "@/common/apis/game/craft"
 import { getTrans } from "@/locales"
-import { COIN_HRID } from "@/pinia/stores/game"
+import { COIN_HRID, type PriceStatus } from "@/pinia/stores/game"
 
 type AlchemyCtor = new (config: AlchemyCalculatorConfig) => Calculator & { available: boolean, run: () => Calculator }
 
@@ -351,7 +351,7 @@ export interface StoneLeaderboardResult {
  * 贤者之石获取排行：扫全部物品，找转化掉落表/分解产物里含贤者之石的来源，
  * 复用转化/分解计算器（含催化剂成本、稀有掉落、税），按单颗净成本升序。
  */
-export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean }): StoneLeaderboardResult {
+export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean, materialPriceStatusOverrides?: Record<string, Record<string, PriceStatus>> }): StoneLeaderboardResult {
   const gameData = getGameDataApi()
   const stoneBid = getPriceOf(STONE_HRID, 0).bid
   const stoneAsk = getPriceOf(STONE_HRID, 0).ask
@@ -377,7 +377,7 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const a = getPriceOf(cand.hrid, lv).ask
       if (typeof a === "number" && a > 0 && (marketAsk < 0 || a < marketAsk)) marketAsk = a
     }
-    const craftBreakdown = getMaterialCostBreakdownOf(cand.hrid)
+    const craftBreakdown = getMaterialCostBreakdownOf(cand.hrid, opts.materialPriceStatusOverrides?.[cand.hrid])
     const craftCost = craftBreakdown?.total ?? -1
     // 生效买价：勾选「买材料自制」时一律按材料成本计（无制造配方的回退市场价）；
     // 未勾选保持原逻辑：有卖单用卖单价，无卖单回退制造成本（买不到就自己造）

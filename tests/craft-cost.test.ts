@@ -1,10 +1,11 @@
+import type { PriceStatus } from "@/pinia/stores/game"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getMaterialCostBreakdownOf, getMaterialCostOf } from "@/common/apis/game/craft"
 
 const state = vi.hoisted(() => ({
   artisan: 0.1,
-  buyStatus: "ask",
-  sellStatus: "bid",
+  buyStatus: "ASK",
+  sellStatus: "BID",
   timestamp: 1
 }))
 
@@ -15,8 +16,8 @@ vi.mock("@/common/apis/game", () => ({
         inputItems: [{ itemHrid: "/items/material", count: 10 }]
       }
     : undefined,
-  getPriceOf: (hrid: string) => ({
-    ask: hrid === "/items/base_item" ? 100 : hrid === "/items/material" ? 20 : -1
+  getPriceOf: (hrid: string, _level: number, buyStatus: string = state.buyStatus) => ({
+    ask: hrid === "/items/base_item" ? 100 : hrid === "/items/material" ? (buyStatus === "BID" ? 15 : 20) : -1
   })
 }))
 
@@ -55,7 +56,8 @@ describe("single-step manufacture cost", () => {
           unitPrice: 100,
           subtotal: 100,
           artisanApplied: false,
-          priceSource: "market"
+          priceSource: "market",
+          priceStatus: "ASK"
         },
         {
           hrid: "/items/material",
@@ -64,7 +66,8 @@ describe("single-step manufacture cost", () => {
           unitPrice: 20,
           subtotal: 180,
           artisanApplied: true,
-          priceSource: "market"
+          priceSource: "market",
+          priceStatus: "ASK"
         }
       ],
       total: 280
@@ -75,5 +78,15 @@ describe("single-step manufacture cost", () => {
     expect(getMaterialCostOf("/items/test_item")).toBe(280)
     state.artisan = 0.2
     expect(getMaterialCostOf("/items/test_item")).toBe(260)
+  })
+
+  it("supports a per-material market side override", () => {
+    const overrides = { "/items/material": "BID" as PriceStatus }
+    expect(getMaterialCostOf("/items/test_item", overrides)).toBe(235)
+    expect(getMaterialCostBreakdownOf("/items/test_item", overrides)?.items[1]).toMatchObject({
+      unitPrice: 15,
+      subtotal: 135,
+      priceStatus: "BID"
+    })
   })
 })
