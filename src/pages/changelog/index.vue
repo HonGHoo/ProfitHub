@@ -22,7 +22,7 @@ const { locale, t } = useI18n()
             <li>强化分解 / 超级强化：修复更换配装后数据不更新（旧缓存锁死）与偶发页面崩溃；两页首轮计算均改为分片进行并显示进度条，不再卡死界面，同一会话内再次进入即时显示。</li>
             <li>首页对比：修复预设列大量显示「—」——对比数据此前只取预设榜单的分页切片+搜索过滤（预设里时薪/利润率不达标的物品被滤掉），现改为全量比对，任意行都能显示预设对比数值；点击列头排序时列表崩溃/空白同步修复。</li>
             <li>实时社区Buff：修复「实时数据未就绪」长时间不恢复的问题（空数据退避从 1 小时缩短为 3 分钟）；打开开关立即拉取一次。</li>
-            <li>贤者之石：来源买价改为全部强化等级取最低卖单，修复「市场实际买得到却显示无单」；价差改为省钱口径：市场买价 − 单颗净成本，绿色 = 自己做一颗比直接买省多少。</li>
+            <li>贤者之石：来源买价改为全部强化等级取最低卖单，修复「市场实际买得到却显示无单」；自制价按最终步骤单次材料成本计算；价差按卖出石头的税后到手价 − 单颗净成本计算。</li>
             <li>一键导入：剪贴板兜底读到无关内容时给出明确指引（原先误报「导入失败」）；「安装脚本」链接改为官方直链并高亮显示。</li>
             <li>装备优化：修复选择采集专业（挤奶/采摘/伐木）点击「开始优化」时的页面崩溃；修复炼金在个别市场数据下显示 NaN 的问题。</li>
             <li>一键导入：插件关闭后桥接缓存超过 2 小时自动失效，不再静默导入旧快照。</li>
@@ -48,7 +48,7 @@ const { locale, t } = useI18n()
             <li>Enhance-decompose / Super enhance: results no longer locked to stale cache after switching presets; random render crashes fixed. Both pages now compute in chunks with a progress bar instead of freezing the page; instant on re-entry within the same session.</li>
             <li>Homepage compare: fixed compare columns mostly showing "—" — compare data used to come from the preset leaderboard's page slice plus search filters (items under the rate threshold got filtered out of that preset's column); it now joins against the full list so every row shows the preset's numbers. Column-sort crash/blank also fixed.</li>
             <li>Live community buffs: "data not ready" no longer sticks for an hour (empty-data backoff shortened to 3 minutes); toggling the switch triggers an immediate fetch.</li>
-            <li>Philosopher's stone: source buy prices now take the lowest ask across all enhancement levels (items were wrongly shown as "no listing"); the spread is now savings-caliber: market ask − net cost per stone (green = how much you save by crafting it yourself).</li>
+            <li>Philosopher's stone: source buy prices now take the lowest ask across all enhancement levels (items were wrongly shown as "no listing"); craft cost uses one final-step material cost; spread uses after-tax stone proceeds − net cost per stone.</li>
             <li>1-click import: clear guidance when the clipboard fallback picks up unrelated text (was misreported as "import failed"); install-script link switched to the official one and highlighted.</li>
             <li>Equipment optimizer: fixed a crash when running optimization for gathering skills (milking / foraging / woodcutting); fixed occasional NaN display for alchemy under bad market data.</li>
             <li>1-click import: the bridge cache expires after 2 hours once the userscript is off — no more silent imports of stale snapshots.</li>

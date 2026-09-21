@@ -60,11 +60,10 @@ export function getCraftCostOf(hrid: string): number {
 }
 
 /**
- * 买材料自制的纯材料成本：顶层不取卖单价，按配方把材料买齐（材料有卖单直接买，
- * 无卖单的中间品继续往下递归），多配方取最便宜。无制造配方返回 -1。
+ * 最后一步的单次制造成本：只计算目标物品最终配方所需材料的当前卖单价，
+ * 不再把无卖单的中间品递归展开。多配方取最便宜；缺少任一材料卖单或无配方返回 -1。
  */
-function materialCostRecursive(hrid: string, depth: number): number {
-  if (depth <= 0) return -1
+function finalStepMaterialCost(hrid: string): number {
   const key = hrid.substring(hrid.lastIndexOf("/") + 1)
   let best = -1
   for (const action of MANUFACTURE_ACTIONS) {
@@ -73,7 +72,7 @@ function materialCostRecursive(hrid: string, depth: number): number {
     let cost = 0
     let ok = true
     if (ad.upgradeItemHrid) {
-      const p = craftCostRecursive(ad.upgradeItemHrid, depth - 1)
+      const p = getPriceOf(ad.upgradeItemHrid, 0).ask
       if (p < 0) {
         ok = false
         break
@@ -81,7 +80,7 @@ function materialCostRecursive(hrid: string, depth: number): number {
       cost += p
     }
     for (const input of ad.inputItems) {
-      const p = craftCostRecursive(input.itemHrid, depth - 1)
+      const p = getPriceOf(input.itemHrid, 0).ask
       if (p < 0) {
         ok = false
         break
@@ -100,7 +99,7 @@ export function getMaterialCostOf(hrid: string): number {
   const cacheKey = `${ts}|${hrid}`
   const cached = materialCostCache.get(cacheKey)
   if (cached !== undefined) return cached
-  const value = materialCostRecursive(hrid, 3)
+  const value = finalStepMaterialCost(hrid)
   materialCostCache.set(cacheKey, value)
   return value
 }

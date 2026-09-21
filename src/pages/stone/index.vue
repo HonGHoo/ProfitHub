@@ -32,10 +32,11 @@ function handlePriceStatusChange() {
 const gameStore = useGameStore()
 const stoneResult = ref<StoneLeaderboardResult | null>(null)
 
-// 价差口径（省钱）：市场直接买一颗（最低卖单 ask）− 单颗净成本 = 自己做省多少。
-// 买入本身不涉税，计税开关只影响成本侧（副产物按税后抵扣）
-const stoneAsk = computed(() => {
-  return stoneResult.value?.stoneAsk ?? -1
+// 价差口径（利润）：卖出一颗贤者之石的税后到手价 − 单颗净成本。
+// 计税时石头与副产物均按 95% 到手价计算。
+const stoneBidAfterTax = computed(() => {
+  if (!stoneResult.value) return -1
+  return stoneResult.value.stoneBid * (includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR)
 })
 
 const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
@@ -43,10 +44,10 @@ const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
 const legendLines = [
   t("概率：每做一次转化/分解，真的掉出贤者之石的概率。转化本身有成功率（失败则材料全没），已一并算进去。"),
   t("买价：去市场买这件来源物品要花的钱。带「自制」标签 = 按材料成本计：市场没人卖时的回退，或勾选「买材料自制」后的计价方式。"),
-  t("买材料自制：勾选后来源物品一律按「买材料自己做」的材料成本计价并重排排行榜（无制造配方的仍按市场买价）；买价列同时显示市场买价（划线）供对比。"),
+  t("买材料自制：勾选后来源物品按最终制造步骤的一次材料成本计价，不递归计算更早步骤，并重排排行榜（最终步骤材料缺少卖单或无制造配方时仍按市场买价）；买价列同时显示市场买价（划线）供对比。"),
   t("副产物抵扣：做一次不只出石头，还会搭着出别的东西，这些搭头卖掉（扣 5% 税）能回收的钱，直接从成本里减。例：耳环买价 500M，附带 7 只小耳环回收 31M，净投入就是 469M。"),
   t("单颗净成本：（买价 + 催化剂 − 副产物抵扣）÷ 平均每次出几颗，即搞到一颗石头实际花的钱。排行榜按它从便宜到贵排。"),
-  t("价差：市场直接买一颗的最低卖单 − 单颗净成本。绿色 = 自己做一颗比直接买省的钱；红色 = 不如直接买。")
+  t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
 ]
 
 function fmtStones(v: number) {
@@ -139,7 +140,8 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
         <div class="flex items-center justify-between flex-wrap gap-2">
           <span>{{ t('{0} 种来源参与排行（无卖单的按制造成本计入，{1} 种无法定价未计入）', [stoneResult.rows.length, stoneResult.excludedCount]) }}</span>
           <span class="font-size-13px">
-            {{ t('贤者之石买价') }}：{{ Format.price(stoneAsk) }}
+            {{ t('贤者之石现价') }}：{{ Format.price(stoneResult.stoneBid) }}
+            <template v-if="includeTax">（{{ t('税后') }}：{{ Format.price(stoneBidAfterTax) }}）</template>
           </span>
         </div>
       </template>
@@ -256,9 +258,9 @@ watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
             </el-tooltip>
           </template>
           <template #default="{ row }">
-            <!-- 价差可为负（自制比直接买贵），不能用 Format.price——负数会被当"无单"哨兵 -->
-            <span :class="(stoneAsk - row.costPerStone) >= 0 ? 'color-green' : 'color-red'">
-              {{ stoneAsk > 0 ? Format.money(stoneAsk - row.costPerStone) : "—" }}
+            <!-- 价差可为负，不能用 Format.price——负数会被当"无单"哨兵 -->
+            <span :class="(stoneBidAfterTax - row.costPerStone) >= 0 ? 'color-green' : 'color-red'">
+              {{ stoneBidAfterTax > 0 ? Format.money(stoneBidAfterTax - row.costPerStone) : "—" }}
             </span>
           </template>
         </el-table-column>
