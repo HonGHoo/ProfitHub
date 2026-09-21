@@ -1,4 +1,6 @@
 import { getActionDetailOf, getPriceOf } from "@/common/apis/game"
+import { getBuffOf } from "@/common/apis/player"
+import { SHOP_FIXED_PRICES } from "@/common/config"
 import { useGameStoreOutside } from "@/pinia/stores/game"
 
 /** 制造系动作（锻造/制造/裁缝），与强化页 calcBestManufacturePlan 同口径 */
@@ -50,8 +52,9 @@ function craftCostRecursive(hrid: string, depth: number): number {
  * 结果按市场数据时间戳缓存，市场刷新自动失效。
  */
 export function getCraftCostOf(hrid: string): number {
-  const ts = useGameStoreOutside().marketData?.timestamp ?? 0
-  const cacheKey = `${ts}|${hrid}`
+  const gameStore = useGameStoreOutside()
+  const ts = gameStore.marketData?.timestamp ?? 0
+  const cacheKey = `${ts}|${gameStore.buyStatus}|${gameStore.sellStatus}|${hrid}`
   const cached = craftCostCache.get(cacheKey)
   if (cached !== undefined) return cached
   const value = craftCostRecursive(hrid, 3)
@@ -60,8 +63,9 @@ export function getCraftCostOf(hrid: string): number {
 }
 
 /**
- * 最后一步的单次制造成本：只计算目标物品最终配方所需材料的当前卖单价，
- * 不再把无卖单的中间品递归展开。多配方取最便宜；缺少任一材料卖单或无配方返回 -1。
+ * 与强化页「单步配方」相同口径的单次制造成本：只计算最终配方，
+ * 输入材料应用当前预设的工匠节省；材料缺价时依次回退商店固定价、制造成本。
+ * 多配方取最便宜，无制造配方返回 -1。
  */
 function finalStepMaterialCost(hrid: string): number {
   const key = hrid.substring(hrid.lastIndexOf("/") + 1)
@@ -72,20 +76,27 @@ function finalStepMaterialCost(hrid: string): number {
     let cost = 0
     let ok = true
     if (ad.upgradeItemHrid) {
-      const p = getPriceOf(ad.upgradeItemHrid, 0).ask
+      const marketAsk = getPriceOf(ad.upgradeItemHrid, 0).ask
+      const p = marketAsk >= 0
+        ? marketAsk
+        : (SHOP_FIXED_PRICES[ad.upgradeItemHrid] ?? getCraftCostOf(ad.upgradeItemHrid))
       if (p < 0) {
         ok = false
         break
       }
       cost += p
     }
+    const artisanBuff = getBuffOf(action, "Artisan")
     for (const input of ad.inputItems) {
-      const p = getPriceOf(input.itemHrid, 0).ask
+      const marketAsk = getPriceOf(input.itemHrid, 0).ask
+      const p = marketAsk >= 0
+        ? marketAsk
+        : (SHOP_FIXED_PRICES[input.itemHrid] ?? getCraftCostOf(input.itemHrid))
       if (p < 0) {
         ok = false
         break
       }
-      cost += p * input.count
+      cost += p * input.count * (1 - artisanBuff)
     }
     if (ok && (best < 0 || cost < best)) best = cost
   }
@@ -95,8 +106,10 @@ function finalStepMaterialCost(hrid: string): number {
 const materialCostCache = new Map<string, number>()
 
 export function getMaterialCostOf(hrid: string): number {
-  const ts = useGameStoreOutside().marketData?.timestamp ?? 0
-  const cacheKey = `${ts}|${hrid}`
+  const gameStore = useGameStoreOutside()
+  const ts = gameStore.marketData?.timestamp ?? 0
+  const artisanKey = MANUFACTURE_ACTIONS.map(action => getBuffOf(action, "Artisan")).join("|")
+  const cacheKey = `${ts}|${gameStore.buyStatus}|${gameStore.sellStatus}|${artisanKey}|${hrid}`
   const cached = materialCostCache.get(cacheKey)
   if (cached !== undefined) return cached
   const value = finalStepMaterialCost(hrid)

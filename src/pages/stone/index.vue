@@ -11,6 +11,7 @@ import { getGameDataApi, getItemDetailOf } from "@/common/apis/game"
 import { usePriceStatus } from "@/common/composables/usePriceStatus"
 import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
 import { useGameStore } from "@/pinia/stores/game"
+import { usePlayerStore } from "@/pinia/stores/player"
 import ActionConfig from "../dashboard/components/ActionConfig.vue"
 import GameInfo from "../dashboard/components/GameInfo.vue"
 import PriceStatusSelect from "../dashboard/components/PriceStatusSelect.vue"
@@ -30,6 +31,7 @@ function handlePriceStatusChange() {
 }
 
 const gameStore = useGameStore()
+const playerStore = usePlayerStore()
 const stoneResult = ref<StoneLeaderboardResult | null>(null)
 
 // 价差口径（利润）：卖出一颗贤者之石的税后到手价 − 单颗净成本。
@@ -44,7 +46,7 @@ const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
 const legendLines = [
   t("概率：每做一次转化/分解，真的掉出贤者之石的概率。转化本身有成功率（失败则材料全没），已一并算进去。"),
   t("买价：去市场买这件来源物品要花的钱。带「自制」标签 = 按材料成本计：市场没人卖时的回退，或勾选「买材料自制」后的计价方式。"),
-  t("买材料自制：勾选后来源物品按最终制造步骤的一次材料成本计价，不递归计算更早步骤，并重排排行榜（最终步骤材料缺少卖单或无制造配方时仍按市场买价）；买价列同时显示市场买价（划线）供对比。"),
+  t("买材料自制：与强化页「单步配方」同口径，按最终制造步骤的一次材料成本计价（包含当前预设的工匠节省），不递归计算更早步骤，并重排排行榜；买价列同时显示市场买价（划线）供对比。"),
   t("副产物抵扣：做一次不只出石头，还会搭着出别的东西，这些搭头卖掉（扣 5% 税）能回收的钱，直接从成本里减。例：耳环买价 500M，附带 7 只小耳环回收 31M，净投入就是 469M。"),
   t("单颗净成本：（买价 + 催化剂 − 副产物抵扣）÷ 平均每次出几颗，即搞到一颗石头实际花的钱。排行榜按它从便宜到贵排。"),
   t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
@@ -82,6 +84,7 @@ function compute() {
 watch([catalystRank, includeTax, includeRare, craftMode], compute, { immediate: true })
 watch(() => gameStore.marketData?.timestamp, () => compute())
 watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
+watch(() => playerStore.config, () => compute(), { deep: true })
 </script>
 
 <template>
