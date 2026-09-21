@@ -1,19 +1,13 @@
-name: Build And Deploy milkonomy
-# 允许手动触发
+name: Build and Deploy ProfitHub
+
 on:
-  # 推送 main 自动部署（如不需要可注释掉这一段）
   push:
     branches: [main]
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      force:
-        type: boolean
-        default: false
-        description: 是否强制打包部署
 
-permissions:
-  contents: write
+concurrency:
+  group: profithub-production
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -32,52 +26,28 @@ jobs:
         with:
           version: 9
 
-      # GitHub Pages (Project Pages) 通常部署在 /<repo>/ 子路径下。
-      # 这里根据仓库名自动设置 Vite base 与 router history，避免资源 404 导致白屏。
-      # 绑定自定义域名（public/CNAME 存在）时站点在根路径，base 必须是 /
-      - name: Set GitHub Pages env
-        shell: bash
-        run: |
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          if [ -f public/CNAME ]; then
-            echo "VITE_PUBLIC_PATH=/" >> "$GITHUB_ENV"
-          elif [[ "$REPO_NAME" == *.github.io ]]; then
-            echo "VITE_PUBLIC_PATH=/" >> "$GITHUB_ENV"
-          else
-            echo "VITE_PUBLIC_PATH=/$REPO_NAME/" >> "$GITHUB_ENV"
-          fi
-          echo "VITE_ROUTER_HISTORY=hash" >> "$GITHUB_ENV"
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
+        env:
+          VITE_PUBLIC_PATH: /
+          VITE_ROUTER_HISTORY: hash
 
-      # fix https://github.com/vitejs/vite/issues/9119
-      - name: Create .nojekyll
-        run: touch dist/.nojekyll
-
-      # 如果 gh-pages 分支已存在，则删除 dist/data，避免覆盖线上最新 data/
-      # 如果 gh-pages 不存在（第一次部署），保留 dist/data 以确保站点可正常运行
-      - name: Check gh-pages branch exists
+      - name: Configure SSH
         shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
-          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
-            echo "HAS_GH_PAGES=true" >> "$GITHUB_ENV"
-          else
-            echo "HAS_GH_PAGES=false" >> "$GITHUB_ENV"
-          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p 63022 -H rdp.luulyuan.cc >> ~/.ssh/known_hosts
 
-      - name: Remove dist/data (keep remote data)
-        if: env.HAS_GH_PAGES == 'true'
-        run: rm -rf dist/data
-
-      - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          # Use the built-in GITHUB_TOKEN (recommended). Avoid custom secrets that are not a PAT.
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gh-pages
-          folder: dist
-          clean: false # 不清除 gh-pages 上已有文件（例如 data/）
+      - name: Deploy static files
+        run: >-
+          rsync -az --delete
+          -e "ssh -p 63022"
+          dist/
+          radxa@rdp.luulyuan.cc:/home/radxa/apps/profithub/site/
