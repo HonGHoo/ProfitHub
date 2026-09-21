@@ -51,6 +51,16 @@ export const publicRoutes: RouteRecordRaw[] = [
           svgIcon: "dashboard",
           affix: true
         }
+      },
+      {
+        path: "opportunity",
+        component: () => import("@/pages/opportunity/index.vue"),
+        name: "Opportunity",
+        meta: {
+          title: t("全市场机会"),
+          elIcon: "TrendCharts",
+          affix: false
+        }
       }
     ]
   },

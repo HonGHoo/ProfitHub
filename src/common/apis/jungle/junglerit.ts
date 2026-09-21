@@ -4,6 +4,7 @@ import { EnhanceCalculator } from "@/calculator/enhance"
 import { ManufactureCalculator } from "@/calculator/manufacture"
 import { getStorageCalculatorItem } from "@/calculator/utils"
 import { WorkflowCalculator } from "@/calculator/workflow"
+import { SELL_TAX_FACTOR } from "@/common/constants/market"
 import { getEquipmentTypeOf, isRefined } from "@/common/utils/game"
 import locales, { getTrans } from "@/locales"
 import { useGameStoreOutside } from "@/pinia/stores/game"
@@ -39,7 +40,14 @@ export async function getDataApi(params: any) {
   return handlePage(handleSort(handleSearch(profitList, params), params), params)
 }
 
-function calcEnhanceProfit(params: any) {
+export interface InheritEnhanceOptions {
+  sellTaxFactor?: number
+  includeRare?: boolean
+}
+
+export function calcEnhanceProfit(params: any, options: InheritEnhanceOptions = {}) {
+  const sellTaxFactor = options.sellTaxFactor ?? SELL_TAX_FACTOR
+  const includeRare = options.includeRare !== false
   const gameData = getGameDataApi()
   // 所有物品列表
   const list = Object.values(gameData.itemDetailMap)
@@ -59,7 +67,7 @@ function calcEnhanceProfit(params: any) {
           [getTrans("裁缝"), "tailoring"]
         ]
         for (const [project, action] of projects) {
-          const mc = new ManufactureCalculator({ hrid: item.hrid, project, action, originLevel: inheritOrgLvl })
+          const mc = new ManufactureCalculator({ hrid: item.hrid, project, action, originLevel: inheritOrgLvl, includeRare })
           const actionItem = mc.actionItem
           if (!actionItem?.upgradeItemHrid) {
             continue
@@ -101,7 +109,7 @@ function calcEnhanceProfit(params: any) {
                   ecUp
                     ? [getStorageCalculatorItem(ec), getStorageCalculatorItem(ecUp)]
                     : getStorageCalculatorItem(ec)
-                ], `${project}+${inheritOrgLvl} ${getTrans("强化")}+${enhanceLevel}`)
+                ], `${project}+${inheritOrgLvl} ${getTrans("强化")}+${enhanceLevel}`, sellTaxFactor)
 
                 c.run()
 

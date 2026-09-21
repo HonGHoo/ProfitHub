@@ -3,8 +3,9 @@ import { EnhanceCalculator } from "@/calculator/enhance"
 import { ManufactureCalculator } from "@/calculator/manufacture"
 import { getStorageCalculatorItem } from "@/calculator/utils"
 import { WorkflowCalculator } from "@/calculator/workflow"
-import { getEquipmentTypeOf } from "@/common/utils/game"
+import { SELL_TAX_FACTOR } from "@/common/constants/market"
 
+import { getEquipmentTypeOf } from "@/common/utils/game"
 import locales, { getTrans } from "@/locales"
 import { useGameStoreOutside } from "@/pinia/stores/game"
 import { getGameDataApi } from "../game"
@@ -59,7 +60,14 @@ export async function getDataApi(params: any, cacheKey?: string) {
   return handlePage(handleSort(handleSearch(profitList, params), params), params)
 }
 
-async function calcEnhanceProfit() {
+export interface ManufactureEnhanceOptions {
+  sellTaxFactor?: number
+  includeRare?: boolean
+}
+
+export async function calcEnhanceProfit(options: ManufactureEnhanceOptions = {}) {
+  const sellTaxFactor = options.sellTaxFactor ?? SELL_TAX_FACTOR
+  const includeRare = options.includeRare !== false
   const gameData = getGameDataApi()
   // 所有物品列表
   const validItems = Object.values(gameData.itemDetailMap).filter(item => item.enhancementCosts)
@@ -95,12 +103,13 @@ async function calcEnhanceProfit() {
         ]
         for (const [projectLast, actionLast] of projects) {
           for (const [project, action] of projects) {
-            const manual = new ManufactureCalculator({ hrid: item.hrid, project, action })
+            const manual = new ManufactureCalculator({ hrid: item.hrid, project, action, includeRare })
 
             if (!enhancer.available) {
               continue
             }
 
+            enhancer.setSellTaxFactor(sellTaxFactor)
             enhancer.run()
             if (enhancer.result.profitPH > bestProfitStep0) {
               bestProfitStep0 = enhancer.result.profitPH
@@ -115,7 +124,7 @@ async function calcEnhanceProfit() {
             const c = new WorkflowCalculator([
               getStorageCalculatorItem(manual),
               getStorageCalculatorItem(enhancer)
-            ], `${project} → ${getTrans("强化")}+${enhanceLevel}`)
+            ], `${project} → ${getTrans("强化")}+${enhanceLevel}`, sellTaxFactor)
 
             c.run()
 
@@ -130,7 +139,8 @@ async function calcEnhanceProfit() {
               const nextManual = new ManufactureCalculator({
                 hrid: currentManual.actionItem.upgradeItemHrid,
                 project: projectLast,
-                action: actionLast
+                action: actionLast,
+                includeRare
               })
 
               if (!nextManual.available) {
@@ -148,7 +158,8 @@ async function calcEnhanceProfit() {
 
               const cStep = new WorkflowCalculator(
                 stepItems,
-                `${stepCount}${getTrans("步")}${project} → ${getTrans("强化")}+${enhanceLevel}`
+                `${stepCount}${getTrans("步")}${project} → ${getTrans("强化")}+${enhanceLevel}`,
+                sellTaxFactor
               )
               cStep.run()
               multiStepWorkflows.push(cStep)

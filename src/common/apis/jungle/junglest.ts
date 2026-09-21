@@ -1,6 +1,7 @@
 import { EnhanceCalculator } from "@/calculator/enhance"
-import locales from "@/locales"
+import { SELL_TAX_FACTOR } from "@/common/constants/market"
 
+import locales from "@/locales"
 import { useGameStoreOutside } from "@/pinia/stores/game"
 import { getGameDataApi } from "../game"
 import { getUsedPriceOf } from "../price"
@@ -44,7 +45,11 @@ export async function getDataApi(params: any) {
   return handlePage(handleSort(handleSearch(profitList, params), params), params)
 }
 
-export function calcSuperEnhanceProfit() {
+/**
+ * 直接强化全量候选。调用者可传入统一的税率口径，避免全市场排行把
+ * 默认 5% 税的强化结果和“未计税”的其它路线混在一起。
+ */
+export function calcSuperEnhanceProfit(sellTaxFactor: number = SELL_TAX_FACTOR) {
   const gameData = getGameDataApi()
   // 所有物品列表
   const list = Object.values(gameData.itemDetailMap)
@@ -80,6 +85,7 @@ export function calcSuperEnhanceProfit() {
             if (!c.available) {
               continue
             }
+            c.setSellTaxFactor(sellTaxFactor)
             c.run()
 
             if (c.result.profitPH > bestProfit) {

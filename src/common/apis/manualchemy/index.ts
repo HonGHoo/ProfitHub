@@ -42,6 +42,11 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
     }
     ElMessage.success(t("计算完成，耗时{0}秒", [(Date.now() - startTime) / 1000]))
   }
+  // 全市场机会页需要同一行情快照下的完整候选集；分页或默认筛选会悄悄漏掉
+  // 低利润率但高周转的制作→炼金路线。
+  if (params.fullList) {
+    return { list: profitList, total: profitList.length } as any
+  }
   return handlePage(handleSort(handleSearch(profitList, params), params), params)
 }
 
