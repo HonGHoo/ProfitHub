@@ -4,7 +4,7 @@
   "version": "2.8.1",
   "description": "A crafted admin template, built with Vue3, Vite, TypeScript, Element Plus, and more",
   "author": "luyh7 <470103427@qq.com> (https://github.com/luyh7)",
-  "repository": "https://github.com/luyh7/milkonomy",
+  "repository": "https://github.com/HonGHoo/ProfitHub",
   "scripts": {
     "dev": "vite --mode private",
     "dev:public": "vite --mode public",
