@@ -1,9 +1,10 @@
 import type Calculator from "."
 import type { AlchemyCalculatorConfig } from "@/calculator/alchemy"
+import type { FinalStepMaterialCostBreakdown } from "@/common/apis/game/craft"
 import type { ItemDetail } from "~/game"
 import { CoinifyCalculator, DecomposeCalculator, TransmuteCalculator } from "@/calculator/alchemy"
 import { getGameDataApi, getItemDetailOf, getPriceOf } from "@/common/apis/game"
-import { getCraftCostOf, getMaterialCostOf } from "@/common/apis/game/craft"
+import { getCraftCostOf, getMaterialCostBreakdownOf } from "@/common/apis/game/craft"
 import { getTrans } from "@/locales"
 import { COIN_HRID } from "@/pinia/stores/game"
 
@@ -328,6 +329,8 @@ export interface StoneSourceRow {
   marketAsk?: number
   /** 买材料自制的纯材料成本（无制造配方为 -1） */
   craftCost?: number
+  /** 最后一步单步制作成本明细 */
+  craftBreakdown: FinalStepMaterialCostBreakdown | null
   /** 税后副产物期望抵扣（其他产物 EV，含稀有掉落） */
   byproductIncome: number
   /** 单颗贤者之石净成本 =（买价+催化剂 − 副产物抵扣）÷ 期望石头数 */
@@ -374,12 +377,13 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const a = getPriceOf(cand.hrid, lv).ask
       if (typeof a === "number" && a > 0 && (marketAsk < 0 || a < marketAsk)) marketAsk = a
     }
-    const craftCost = opts.craftMode ? getMaterialCostOf(cand.hrid) : -1
+    const craftBreakdown = getMaterialCostBreakdownOf(cand.hrid)
+    const craftCost = craftBreakdown?.total ?? -1
     // 生效买价：勾选「买材料自制」时一律按材料成本计（无制造配方的回退市场价）；
     // 未勾选保持原逻辑：有卖单用卖单价，无卖单回退制造成本（买不到就自己造）
     let buyPrice: number
     let useCraft = false
-    if (craftCost > 0) {
+    if (opts.craftMode && craftCost > 0) {
       buyPrice = craftCost
       useCraft = true
     } else if (marketAsk >= 0) {
@@ -416,7 +420,7 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const byproductIncome = calc.income * succ - stoneValuePerAttempt
       const costPerStone = (calc.cost - byproductIncome) / stonesPerAction
       if (!Number.isFinite(costPerStone)) continue
-      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, useCraft, marketAsk, craftCost, byproductIncome, costPerStone }
+      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, useCraft, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone }
       if (!best || row.costPerStone < best.costPerStone) best = row
     }
     if (best) rows.push(best)

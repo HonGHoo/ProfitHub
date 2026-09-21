@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getMaterialCostOf } from "@/common/apis/game/craft"
+import { getMaterialCostBreakdownOf, getMaterialCostOf } from "@/common/apis/game/craft"
 
 const state = vi.hoisted(() => ({
   artisan: 0.1,
@@ -44,6 +44,31 @@ describe("single-step manufacture cost", () => {
 
   it("matches enhancer single-step rules and applies Artisan only to input materials", () => {
     expect(getMaterialCostOf("/items/test_item")).toBe(280)
+    expect(getMaterialCostBreakdownOf("/items/test_item")).toEqual({
+      action: "crafting",
+      artisanBuff: 0.1,
+      items: [
+        {
+          hrid: "/items/base_item",
+          baseCount: 1,
+          count: 1,
+          unitPrice: 100,
+          subtotal: 100,
+          artisanApplied: false,
+          priceSource: "market"
+        },
+        {
+          hrid: "/items/material",
+          baseCount: 10,
+          count: 9,
+          unitPrice: 20,
+          subtotal: 180,
+          artisanApplied: true,
+          priceSource: "market"
+        }
+      ],
+      total: 280
+    })
   })
 
   it("recalculates when the preset Artisan buff changes", () => {

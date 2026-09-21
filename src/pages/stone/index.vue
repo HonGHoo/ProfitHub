@@ -6,7 +6,7 @@ import { Warning } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { computeStoneLeaderboard, type StoneLeaderboardResult } from "@/calculator/alchemyChain"
+import { computeStoneLeaderboard, type StoneLeaderboardResult, type StoneSourceRow } from "@/calculator/alchemyChain"
 import { getGameDataApi, getItemDetailOf } from "@/common/apis/game"
 import { usePriceStatus } from "@/common/composables/usePriceStatus"
 import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
@@ -33,6 +33,9 @@ function handlePriceStatusChange() {
 const gameStore = useGameStore()
 const playerStore = usePlayerStore()
 const stoneResult = ref<StoneLeaderboardResult | null>(null)
+const hoveredCostHrid = ref<string | null>(null)
+const pinnedCostHrid = ref<string | null>(null)
+let costHideTimer: ReturnType<typeof setTimeout> | undefined
 
 // 价差口径（利润）：卖出一颗贤者之石的税后到手价 − 单颗净成本。
 // 计税时石头与副产物均按 95% 到手价计算。
@@ -42,6 +45,55 @@ const stoneBidAfterTax = computed(() => {
 })
 
 const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
+
+function cancelCostHide() {
+  if (costHideTimer) clearTimeout(costHideTimer)
+  costHideTimer = undefined
+}
+
+function showCostPopover(hrid: string) {
+  cancelCostHide()
+  hoveredCostHrid.value = hrid
+}
+
+function scheduleCostHide(hrid: string) {
+  cancelCostHide()
+  costHideTimer = setTimeout(() => {
+    if (hoveredCostHrid.value === hrid) hoveredCostHrid.value = null
+  }, 180)
+}
+
+function togglePinnedCost(hrid: string) {
+  cancelCostHide()
+  pinnedCostHrid.value = pinnedCostHrid.value === hrid ? null : hrid
+  hoveredCostHrid.value = hrid
+}
+
+function closeCostPopover(hrid: string) {
+  if (pinnedCostHrid.value === hrid) pinnedCostHrid.value = null
+  if (hoveredCostHrid.value === hrid) hoveredCostHrid.value = null
+}
+
+function isCostPopoverVisible(hrid: string) {
+  return hoveredCostHrid.value === hrid || pinnedCostHrid.value === hrid
+}
+
+function actionLabel(action: string) {
+  return action === "cheesesmithing" ? t("锻造") : action === "tailoring" ? t("裁缝") : t("制造")
+}
+
+function priceSourceLabel(source: string) {
+  if (source === "shop") return t("商店固定价")
+  if (source === "craft") return t("制造价回退")
+  return t("市场卖单")
+}
+
+function materialCountText(row: StoneSourceRow, index: number) {
+  const item = row.craftBreakdown?.items[index]
+  if (!item) return "—"
+  if (!item.artisanApplied || !row.craftBreakdown?.artisanBuff) return Format.number(item.count, 2)
+  return `${Format.number(item.baseCount, 2)} × ${Format.percent(1 - row.craftBreakdown.artisanBuff)} = ${Format.number(item.count, 2)}`
+}
 
 const legendLines = [
   t("概率：每做一次转化/分解，真的掉出贤者之石的概率。转化本身有成功率（失败则材料全没），已一并算进去。"),
@@ -156,10 +208,75 @@ watch(() => playerStore.config, () => compute(), { deep: true })
         </el-table-column>
         <el-table-column :label="t('来源物品')" min-width="170">
           <template #default="{ row }">
-            <span class="flex items-center gap-1">
-              <ItemIcon :hrid="row.hrid" :width="20" :height="20" />
-              {{ itemName(row.hrid) }}
-            </span>
+            <el-popover
+              :visible="isCostPopoverVisible(row.hrid)"
+              placement="right-start"
+              :width="500"
+              :persistent="true"
+            >
+              <template #reference>
+                <span
+                  class="cost-name-trigger flex items-center gap-1"
+                  role="button"
+                  tabindex="0"
+                  :title="pinnedCostHrid === row.hrid ? t('点击取消固定') : t('悬停查看，点击固定')"
+                  @mouseenter="showCostPopover(row.hrid)"
+                  @mouseleave="scheduleCostHide(row.hrid)"
+                  @click.stop="togglePinnedCost(row.hrid)"
+                  @keydown.enter.prevent="togglePinnedCost(row.hrid)"
+                >
+                  <ItemIcon :hrid="row.hrid" :width="20" :height="20" />
+                  <span>{{ itemName(row.hrid) }}</span>
+                </span>
+              </template>
+              <div
+                class="cost-popover"
+                @mouseenter="showCostPopover(row.hrid)"
+                @mouseleave="scheduleCostHide(row.hrid)"
+              >
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-1 font-bold">
+                    <ItemIcon :hrid="row.hrid" :width="22" :height="22" />
+                    {{ itemName(row.hrid) }} · {{ t('单步制作成本') }}
+                  </div>
+                  <el-button v-if="pinnedCostHrid === row.hrid" link size="small" @click="closeCostPopover(row.hrid)">
+                    {{ t('关闭') }}
+                  </el-button>
+                </div>
+                <template v-if="row.craftBreakdown">
+                  <div class="font-size-12px color-gray-500 mb-2">
+                    {{ t('途径') }}：{{ actionLabel(row.craftBreakdown.action) }} ·
+                    {{ t('工匠节省') }}：{{ Format.percent(row.craftBreakdown.artisanBuff) }}
+                  </div>
+                  <div class="cost-grid cost-grid-header">
+                    <span>{{ t('材料') }}</span>
+                    <span>{{ t('折算数量') }}</span>
+                    <span>{{ t('单价') }}</span>
+                    <span>{{ t('小计') }}</span>
+                  </div>
+                  <div v-for="(item, index) in row.craftBreakdown.items" :key="`${item.hrid}-${index}`" class="cost-grid cost-grid-row">
+                    <span class="flex items-center gap-1 min-w-0">
+                      <ItemIcon :hrid="item.hrid" :width="18" :height="18" />
+                      <span class="truncate">{{ itemName(item.hrid) }}</span>
+                    </span>
+                    <span>{{ materialCountText(row, index) }}</span>
+                    <span>
+                      {{ Format.money(item.unitPrice) }}
+                      <small class="block color-gray-400">{{ priceSourceLabel(item.priceSource) }}</small>
+                    </span>
+                    <span>{{ Format.money(item.subtotal) }}</span>
+                  </div>
+                  <div class="flex justify-end items-center gap-3 mt-2 font-bold">
+                    <span>{{ t('合计') }}</span>
+                    <span>{{ Format.money(row.craftBreakdown.total) }}</span>
+                  </div>
+                  <div class="font-size-12px color-gray-500 mt-2">
+                    {{ t('本成本只计算制作投入，不包含市场卖出税。') }}
+                  </div>
+                </template>
+                <el-empty v-else :description="t('该物品没有可计算的单步制造配方。')" :image-size="44" />
+              </div>
+            </el-popover>
           </template>
         </el-table-column>
         <el-table-column :label="t('途径')" align="center" width="70">
@@ -271,3 +388,32 @@ watch(() => playerStore.config, () => compute(), { deep: true })
     </el-card>
   </div>
 </template>
+
+<style scoped>
+.cost-name-trigger {
+  width: fit-content;
+  cursor: pointer;
+  border-bottom: 1px dashed var(--el-color-primary-light-3);
+}
+
+.cost-grid {
+  display: grid;
+  grid-template-columns: minmax(135px, 1.4fr) minmax(120px, 1.2fr) minmax(90px, 1fr) minmax(80px, 0.9fr);
+  column-gap: 10px;
+  align-items: center;
+}
+
+.cost-grid-header {
+  padding: 6px 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.cost-grid-row {
+  min-height: 42px;
+  padding: 4px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 13px;
+}
+</style>
