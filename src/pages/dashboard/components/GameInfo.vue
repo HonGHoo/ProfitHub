@@ -10,7 +10,7 @@ const { t } = useI18n()
 <template>
   <div class="app-version">
     <svg width="20" height="20" style="vertical-align: -4px"><use :xlink:href="getIconOf('/chat_icons/duckling')" /></svg>
-    {{ t('Milkonomy') }} v{{ version }}
+    ProfitHub v{{ version }}
   </div>
   <div
     :class="{
