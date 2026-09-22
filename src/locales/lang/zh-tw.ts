@@ -1,4 +1,5 @@
 export default {
+  "复制物品名字": "複製物品名字",
   "贤者镜触发福气": "賢者鏡觸發福氣",
   "Abyssal Essence": "地狱精华",
   "Acrobatic Hood": "杂技师兜帽",

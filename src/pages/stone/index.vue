@@ -2,7 +2,7 @@
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import { useMemory } from "@@/composables/useMemory"
 import * as Format from "@@/utils/format"
-import { Warning } from "@element-plus/icons-vue"
+import { CopyDocument, Warning } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
@@ -47,6 +47,16 @@ const stoneBidAfterTax = computed(() => {
 })
 
 const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
+
+async function copyItemName(hrid: string) {
+  try {
+    await navigator.clipboard.writeText(itemName(hrid))
+    ElMessage.success(t("已复制到剪贴板"))
+  } catch {
+    ElMessage.error(t("复制失败，请检查浏览器权限设置"))
+  }
+}
+
 const materialPriceStatusOptions = computed<Array<{ value: PriceStatus | typeof GLOBAL_PRICE_STATUS, label: string }>>(() => [
   { value: GLOBAL_PRICE_STATUS, label: t("跟随") },
   { value: PriceStatus.ASK, label: t("左") },
@@ -254,20 +264,30 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
               :persistent="true"
             >
               <template #reference>
-                <span
-                  class="cost-name-trigger flex items-center gap-1"
-                  role="button"
-                  tabindex="0"
-                  :title="pinnedCostHrid === row.hrid ? t('点击取消固定') : t('悬停查看，点击固定')"
-                  @mouseenter="showCostPopover(row.hrid)"
-                  @mouseleave="scheduleCostHide(row.hrid)"
-                  @click.stop="togglePinnedCost(row.hrid)"
-                  @keydown.enter.prevent="togglePinnedCost(row.hrid)"
-                >
-                  <ItemIcon :hrid="row.hrid" :width="20" :height="20" />
-                  <span>{{ itemName(row.hrid) }}</span>
-                  <span v-if="hasCustomMaterialPrice(row.hrid)" class="custom-price-marker">[{{ t('自') }}]</span>
-                </span>
+                <div class="flex items-center gap-1">
+                  <span
+                    class="cost-name-trigger flex items-center gap-1"
+                    role="button"
+                    tabindex="0"
+                    :title="pinnedCostHrid === row.hrid ? t('点击取消固定') : t('悬停查看，点击固定')"
+                    @mouseenter="showCostPopover(row.hrid)"
+                    @mouseleave="scheduleCostHide(row.hrid)"
+                    @click.stop="togglePinnedCost(row.hrid)"
+                    @keydown.enter.prevent="togglePinnedCost(row.hrid)"
+                  >
+                    <ItemIcon :hrid="row.hrid" :width="20" :height="20" />
+                    <span>{{ itemName(row.hrid) }}</span>
+                    <span v-if="hasCustomMaterialPrice(row.hrid)" class="custom-price-marker">[{{ t('自') }}]</span>
+                  </span>
+                  <el-button
+                    link
+                    size="small"
+                    :icon="CopyDocument"
+                    :title="t('复制物品名字')"
+                    :aria-label="`${t('复制物品名字')}：${itemName(row.hrid)}`"
+                    @click.stop="copyItemName(row.hrid)"
+                  />
+                </div>
               </template>
               <div
                 class="cost-popover"
@@ -299,6 +319,14 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                     <span class="flex items-center gap-1 min-w-0">
                       <ItemIcon :hrid="item.hrid" :width="18" :height="18" />
                       <span class="truncate">{{ itemName(item.hrid) }}</span>
+                      <el-button
+                        link
+                        size="small"
+                        :icon="CopyDocument"
+                        :title="t('复制物品名字')"
+                        :aria-label="`${t('复制物品名字')}：${itemName(item.hrid)}`"
+                        @click.stop="copyItemName(item.hrid)"
+                      />
                     </span>
                     <span>{{ materialCountText(row, index) }}</span>
                     <span>

@@ -177,6 +177,7 @@ export default {
   "确定删除该预设吗？": "Are you sure to delete this preset?",
   "导入": "Import",
   "导出": "Export",
+  "复制物品名字": "Copy item name",
   "已复制到剪贴板": "Copied to clipboard",
   "复制失败，请检查浏览器权限设置": "Copy failed, please check browser permission settings",
   "无效的预设配置": "Invalid preset configuration",

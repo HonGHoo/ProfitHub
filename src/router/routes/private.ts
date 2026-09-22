@@ -58,7 +58,7 @@ export const privateRoutes: RouteRecordRaw[] = [
         path: "/stone",
         component: () => import("@/pages/stone/index.vue"),
         name: "Stone",
-        meta: { title: t("贤者路径计算"), svgIcon: "dashboard" }
+        meta: { title: t("贤者路径计算"), svgIcon: "dashboard", affix: true }
       },
       {
         path: "/super-alchemy",
