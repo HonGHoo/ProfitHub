@@ -1,0 +1,1 @@
+import{d as t,az as r,ay as a,g as o,f as s}from"./index-CdW_0zpr.js";const m=t({__name:"index",setup(n){const e=a();return r().replace({path:`/${e.params.path}`,query:e.query}),(c,p)=>(s(),o("div"))}});export{m as default};
