@@ -39,6 +39,8 @@ export interface RequestData {
   bestStepOnly?: boolean
   /** 对比模式：返回未经搜索/排序/分页的全量列表（首页对比列按物品 join 取数，过滤会把预设列滤成空） */
   fullList?: boolean
+  /** 忽略由界面共享的旧计算器缓存；快照扫描必须使用当前冻结输入重算。 */
+  fresh?: boolean
 }
 
 export type ResponseData = ApiResponseData<{

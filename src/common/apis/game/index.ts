@@ -10,6 +10,14 @@ const game = {
   gameData: null as GameData | null,
   marketData: null as MarketData | null
 }
+interface CalculationSnapshot {
+  gameData: GameData
+  marketData: MarketData
+  buyStatus: PriceStatus
+  sellStatus: PriceStatus
+}
+let calculationSnapshot: CalculationSnapshot | null = null
+let calculationSnapshotQueue: Promise<void> = Promise.resolve()
 let _actionDetailMapCache: Record<string, ActionDetail> = {}
 const _itemDetailMapCache: Record<string, ItemDetail> = {}
 const _communityBuffTypeDetailMapCache: Record<string, CommunityBuffDetail> = {}
@@ -51,12 +59,36 @@ watch(() => useGameStoreOutside().sellStatus, (newVal) => {
 
 /** 查 */
 export function getGameDataApi() {
-  const res = game.gameData
+  const res = calculationSnapshot?.gameData ?? game.gameData
   return res!
 }
 export function getMarketDataApi() {
-  const res = game.marketData
+  const res = calculationSnapshot?.marketData ?? game.marketData
   return res!
+}
+
+/**
+ * Legacy calculators read global API helpers. This serialises scans and temporarily
+ * binds those helpers to immutable copies so a market refresh cannot mix prices
+ * from two timestamps within one opportunity result.
+ */
+export async function withCalculationSnapshot<T>(snapshot: CalculationSnapshot, run: () => Promise<T>): Promise<T> {
+  const previousRun = calculationSnapshotQueue
+  let release!: () => void
+  calculationSnapshotQueue = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await previousRun
+  const previousSnapshot = calculationSnapshot
+  calculationSnapshot = snapshot
+  _priceCache = {}
+  try {
+    return await run()
+  } finally {
+    calculationSnapshot = previousSnapshot
+    _priceCache = {}
+    release()
+  }
 }
 const SPECIAL_PRICE: Record<string, () => MarketItemPrice> = {
   "/items/cowbell": () => {
@@ -156,7 +188,7 @@ export function priceStepOf(price: number, high: boolean = true) {
   return high ? (price + priceStep[highStepIndex][1]) * 10 ** dec : (price - priceStep[lowStepIndex][1]) * 10 ** dec
 }
 
-export function getPriceOf(hrid: string, level: number = 0, buyStatus: PriceStatus = currentBuyStatus, sellStatus: PriceStatus = currentSellStatus): MarketItemPrice {
+export function getPriceOf(hrid: string, level: number = 0, buyStatus: PriceStatus = calculationSnapshot?.buyStatus ?? currentBuyStatus, sellStatus: PriceStatus = calculationSnapshot?.sellStatus ?? currentSellStatus): MarketItemPrice {
   if (!hrid) {
     return {
       ask: -1,
@@ -167,7 +199,8 @@ export function getPriceOf(hrid: string, level: number = 0, buyStatus: PriceStat
   }
   const item = getItemDetailOf(hrid)
   if (level) {
-    const marketItem = game.marketData?.marketData[hrid]
+    // 强化等级价格也必须读取当前计算快照，不能绕过到响应式全局行情。
+    const marketItem = getMarketDataApi()?.marketData[hrid]
     const priceItem = marketItem ? marketItem[level] : undefined
 
     const price = {

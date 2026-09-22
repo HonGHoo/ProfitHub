@@ -35,7 +35,7 @@ export interface SuperUnitEval {
   /** 每 1 件：沿链净收益（不含本体购入） */
   unitNet: number
   /** 期望子产物：每 1 件产出多少 */
-  children: { hrid: string, countPerUnit: number }[]
+  children: { hrid: string, countPerUnit: number, evaluation?: SuperUnitEval }[]
   /** 因转化环切断、按直卖计的产物 */
   cycleCutProducts: { hrid: string, count: number }[]
   /** 主线动作序列（火车式"几步炼金"展示用）：本步动作 + 贡献净收益最大的可炼子节点的主线 */
@@ -69,6 +69,15 @@ export interface SuperAlchemyOptions {
   mode: SuperAlchemyMode
   /** false 时产物剔除稀有掉落与额外精华掉落（只保留主掉落表），默认 true */
   includeRare: boolean
+  /** 有界扫描的节点上限；达到时保留已求得候选，并在调用方标记受限。 */
+  maxNodes?: number
+}
+
+export interface SuperAlchemyScanResult {
+  rows: SuperAlchemyRow[]
+  nodeCount: number
+  limited: boolean
+  cycleCuts: number
 }
 
 /** 详情树节点（数量已按链路缩放） */
@@ -127,6 +136,14 @@ interface Ctx {
   options: SuperAlchemyOptions
   memo: Map<string, SuperUnitEval>
   inProgress: Set<string>
+  limited: boolean
+  cycleCuts: number
+}
+
+/** Shared root objective: compare complete buy-in routes by net profit / time. */
+export function wholeRouteHourlyScore(unitNet: number, timePerUnit: number, purchasePrice: number) {
+  const profit = unitNet - purchasePrice
+  return timePerUnit > 0 ? profit / timePerUnit : profit
 }
 
 function sellValueOf(hrid: string, taxFactor: number) {
@@ -154,8 +171,11 @@ function calcOf(action: SuperAction, hrid: string, catalystRank: number, taxFact
  * 转化环（golem↔twilight↔abyssal 精华互转）用 inProgress 切断：
  * 产物命中正在展开的路径时按直卖计，不再递归。
  */
-function unitEval(hrid: string, ctx: Ctx): SuperUnitEval {
-  const cached = ctx.memo.get(hrid)
+function unitEval(hrid: string, ctx: Ctx, rootAsk?: number): SuperUnitEval {
+  // A start item is evaluated against its own market purchase price.  Do not
+  // reuse a value memoised while that item was an internal child: its best
+  // per-unit disposal need not be its best profit-per-hour route after buy-in.
+  const cached = rootAsk === undefined ? ctx.memo.get(hrid) : undefined
   if (cached) return cached
   const { options } = ctx
   const taxFactor = options.sellTaxFactor
@@ -221,7 +241,9 @@ function unitEval(hrid: string, ctx: Ctx): SuperUnitEval {
             cycleCutProducts.push({ hrid: COIN_HRID, count: countPerUnit * denom })
             continue
           }
-          if (ctx.inProgress.has(product.hrid) || ctx.memo.size > MAX_MEMO) {
+          if (ctx.inProgress.has(product.hrid) || ctx.memo.size >= (ctx.options.maxNodes ?? MAX_MEMO)) {
+            if (ctx.memo.size >= (ctx.options.maxNodes ?? MAX_MEMO)) ctx.limited = true
+            if (ctx.inProgress.has(product.hrid)) ctx.cycleCuts++
             const v = sellValueOf(product.hrid, taxFactor)
             if (v > 0) cutIncome += countPerUnit * v
             cycleCutProducts.push({ hrid: product.hrid, count: countPerUnit })
@@ -234,6 +256,7 @@ function unitEval(hrid: string, ctx: Ctx): SuperUnitEval {
         let timePerUnit = ownTimePerUnit
         for (const child of children) {
           const childEv = unitEval(child.hrid, ctx)
+          child.evaluation = childEv
           unitNet += childEv.unitNet * child.countPerUnit
           timePerUnit += childEv.timePerUnit * child.countPerUnit
         }
@@ -276,7 +299,8 @@ function unitEval(hrid: string, ctx: Ctx): SuperUnitEval {
             mainHrids,
             successRate: calc.successRate,
             attemptsPerUnit: actionsPerItem,
-            priceInvalid: sellUnit < 0
+            // 子节点若最终只能按缺失报价直卖，父链同样不能冒充为可执行报价。
+            priceInvalid: sellUnit < 0 || children.some(child => ctx.memo.get(child.hrid)?.priceInvalid)
           }
         })
       }
@@ -287,14 +311,19 @@ function unitEval(hrid: string, ctx: Ctx): SuperUnitEval {
 
   const alchemyCandidates = candidates.filter(c => c.ev.action !== "sell")
   let chosen: SuperUnitEval
+  const hourlyScore = (candidate: Candidate) => wholeRouteHourlyScore(candidate.ev.unitNet, candidate.ev.timePerUnit, rootAsk ?? 0)
   if (options.mode === "longest") {
     // 最长链：继续炼不比直卖亏就选净收益最高的炼金动作
     const profitable = alchemyCandidates.filter(c => c.ev.unitNet >= sellEv.unitNet - 1e-6)
-    chosen = (profitable.length > 0 ? profitable : candidates).reduce((a, b) => (b.ev.unitNet > a.ev.unitNet ? b : a)).ev
+    chosen = (profitable.length > 0 ? profitable : candidates).reduce((a, b) => (hourlyScore(b) > hourlyScore(a) ? b : a)).ev
   } else {
-    chosen = candidates.reduce((a, b) => (b.ev.unitNet > a.ev.unitNet ? b : a)).ev
+    // Root ranking is the user's objective: tax-adjusted whole-route hourly
+    // profit after its purchase.  Internal children remain a bounded legacy
+    // policy and are intentionally documented as such until Pareto expansion
+    // is implemented.
+    chosen = candidates.reduce((a, b) => (hourlyScore(b) > hourlyScore(a) ? b : a)).ev
   }
-  ctx.memo.set(hrid, chosen)
+  if (rootAsk === undefined) ctx.memo.set(hrid, chosen)
   return chosen
 }
 
@@ -305,13 +334,18 @@ function hasAlchemyDetail(item: ItemDetail) {
 
 /** 全量计算：所有可炼且买得到的物品，按整链利润 / h 降序 */
 export function computeSuperAlchemy(options: SuperAlchemyOptions): SuperAlchemyRow[] {
-  const ctx: Ctx = { options, memo: new Map(), inProgress: new Set() }
+  return computeSuperAlchemyWithStats(options).rows
+}
+
+/** Bounded super-alchemy scan with explicit limit and cycle accounting. */
+export function computeSuperAlchemyWithStats(options: SuperAlchemyOptions): SuperAlchemyScanResult {
+  const ctx: Ctx = { options, memo: new Map(), inProgress: new Set(), limited: false, cycleCuts: 0 }
   const rows: SuperAlchemyRow[] = []
   for (const item of Object.values(getGameDataApi().itemDetailMap)) {
     if (!item.isTradable || !hasAlchemyDetail(item)) continue
     const ask = getUsedPriceOf(item.hrid, 0, "ask") ?? -1
     if (ask < 0) continue // 市场无卖单，链条无从买起
-    const ev = unitEval(item.hrid, ctx)
+    const ev = unitEval(item.hrid, ctx, ask)
     if (ev.action === "sell") continue // 最优处置就是直卖，无炼金意义
     const profit = ev.unitNet - ask
     const cost = ask + ev.costAllPerUnit
@@ -326,13 +360,16 @@ export function computeSuperAlchemy(options: SuperAlchemyOptions): SuperAlchemyR
     })
   }
   rows.sort((a, b) => b.profitPH - a.profitPH)
-  return rows
+  return { rows, nodeCount: ctx.memo.size, limited: ctx.limited, cycleCuts: ctx.cycleCuts }
 }
 
 /** 由记忆化结果重建某物品的展示树（数量按链路缩放） */
-export function buildSuperTree(item: ItemDetail, options: SuperAlchemyOptions): SuperTreeResult {
-  const ctx: Ctx = { options, memo: new Map(), inProgress: new Set() }
-  unitEval(item.hrid, ctx) // 结果进 memo，供 build 复用
+export function buildSuperTree(item: ItemDetail, options: SuperAlchemyOptions, rootAsk?: number): SuperTreeResult {
+  const ctx: Ctx = { options, memo: new Map(), inProgress: new Set(), limited: false, cycleCuts: 0 }
+  const rootEval = unitEval(item.hrid, ctx, rootAsk)
+  // rootAsk evaluation intentionally bypasses normal child memoisation; retain
+  // the selected root only for this display tree.
+  ctx.memo.set(item.hrid, rootEval)
   let nextId = 1
 
   function build(hrid: string, count: number, depth: number): SuperNode {

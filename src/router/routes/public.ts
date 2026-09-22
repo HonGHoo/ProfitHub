@@ -10,6 +10,23 @@ const { t } = locale.global
  */
 export const publicRoutes: RouteRecordRaw[] = [
   {
+    path: "/",
+    component: Layouts,
+    redirect: "/opportunity",
+    children: [
+      {
+        path: "opportunity",
+        component: () => import("@/pages/opportunity/index.vue"),
+        name: "Opportunity",
+        meta: {
+          title: t("全市场机会"),
+          elIcon: "TrendCharts",
+          affix: false
+        }
+      }
+    ]
+  },
+  {
     path: "/redirect",
     component: Layouts,
     meta: {
@@ -50,16 +67,6 @@ export const publicRoutes: RouteRecordRaw[] = [
           title: t("首页"),
           svgIcon: "dashboard",
           affix: true
-        }
-      },
-      {
-        path: "opportunity",
-        component: () => import("@/pages/opportunity/index.vue"),
-        name: "Opportunity",
-        meta: {
-          title: t("全市场机会"),
-          elIcon: "TrendCharts",
-          affix: false
         }
       }
     ]

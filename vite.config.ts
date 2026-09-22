@@ -104,50 +104,20 @@ export default defineConfig(({ mode }) => {
       vue(),
       // 支持 JSX、TSX 语法
       vueJsx(),
-      // 条件构建插件 - 在公开版本中移除私有代码
-      // {
-      //   name: "remove-private-code",
-      //   transform(code: string, id: string) {
-      //     // 只在公开版本构建时处理
-      //     if (VITE_BUILD_MODE !== "private") {
-      //       // 处理路由文件
-      //       if (id.includes("router/index.ts")) {
-      //         // 移除私有路由的导入
-      //         code = code.replace(
-      //           /import\s*\{\s*privateRoutes\s*\}\s*from\s*['".].*routes\/private['"];?\s*/,
-      //           ""
-      //         )
-
-      //         // 移除私有路由的使用
-      //         code = code.replace(
-      //           /\/\/\s*PRIVATE_ROUTES_START[\s\S]*?\/\/\s*PRIVATE_ROUTES_END/g,
-      //           "// Private routes removed in public build"
-      //         )
-
-      //         console.log("Removed private routes from public build")
-      //       }
-
-      //       // 处理私有路由文件 - 返回空导出
-      //       if (id.includes("routes/private")) {
-      //         return "export const privateRoutes = [];"
-      //       }
-
-      //       // 处理私有页面文件 - 返回空组件
-      //       if (id.includes("/pages/enhancest/")
-      //         || id.includes("/pages/junglest/")
-      //         || id.includes("/pages/jungle/")
-      //         || id.includes("/pages/inherit/")
-      //         || id.includes("/pages/decompose/")
-      //         || id.includes("/pages/manualchemy/")
-      //         || id.includes("/pages/demo/")
-      //         || id.includes("/pages/enhanposer/enhanposest")) {
-      //         return "export default { render: () => null };"
-      //       }
-      //     }
-
-      //     return code
-      //   }
-      // },
+      // 公开构建必须从入口移除私有路由；仅把页面放入 private.ts 仍会因静态导入
+      // 被 Rollup 收入产物。这里在解析前替换 private 模块，保留私有构建原样。
+      {
+        name: "remove-private-routes-in-public-build",
+        enforce: "pre",
+        resolveId(id: string) {
+          if (VITE_BUILD_MODE !== "private" && (id === "./routes/private" || id.endsWith("/routes/private"))) return "\0empty-private-routes"
+          return null
+        },
+        load(id: string) {
+          if (id === "\0empty-private-routes") return "export const privateRoutes = [];"
+          return null
+        }
+      },
       // 支持将 SVG 文件导入为 Vue 组件
       svgLoader({
         defaultImport: "url",

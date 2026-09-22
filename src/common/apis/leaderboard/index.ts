@@ -32,7 +32,7 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
   const includeRare = params.includeRare !== false
   const cacheKey = `${useGameStoreOutside().marketData!.timestamp}-${includeTax ? "tax" : "noTax"}-r${includeRare ? "1" : "0"}-${crossStepBalance ? "csb" : "noCsb"}-buy${useGameStoreOutside().buyStatus}-sell${useGameStoreOutside().sellStatus}-v${usePlayerStoreOutside().configVersion}`
   const cached = useGameStoreOutside().getLeaderboardCache(cacheKey)
-  if (cached && cached.length > 0) {
+  if (!params.fresh && cached && cached.length > 0) {
     profitList = cached
   } else {
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -46,9 +46,9 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
       console.error(e)
     }
 
-    if (profitList.length > 0) {
+    if (!params.fresh && profitList.length > 0) {
       useGameStoreOutside().setLeaderBoardCache(profitList, cacheKey)
-    } else {
+    } else if (!params.fresh) {
       useGameStoreOutside().clearLeaderBoardCache(cacheKey)
     }
 

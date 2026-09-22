@@ -26,7 +26,7 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
   const includeTax = params.includeTax !== false
   const sellTaxFactor = includeTax ? SELL_TAX_FACTOR : NO_TAX_FACTOR
   const cacheKey = `${useGameStoreOutside().marketData!.timestamp}-r${includeRare ? "1" : "0"}-t${includeTax ? "tax" : "noTax"}-buy${useGameStoreOutside().buyStatus}-sell${useGameStoreOutside().sellStatus}-v${usePlayerStoreOutside().configVersion}`
-  if (useGameStoreOutside().getManualchemyCache(cacheKey)) {
+  if (!params.fresh && useGameStoreOutside().getManualchemyCache(cacheKey)) {
     profitList = useGameStoreOutside().getManualchemyCache(cacheKey)!
   } else {
     await new Promise(resolve => setTimeout(resolve, 300))
@@ -37,7 +37,7 @@ export async function getLeaderboardDataApi(params: Leaderboard.RequestData) {
       console.error(e)
     }
 
-    if (profitList.length > 0) {
+    if (!params.fresh && profitList.length > 0) {
       useGameStoreOutside().setManualchemyCache(profitList, cacheKey)
     }
     ElMessage.success(t("计算完成，耗时{0}秒", [(Date.now() - startTime) / 1000]))
