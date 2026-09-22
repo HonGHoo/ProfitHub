@@ -104,20 +104,6 @@ export default defineConfig(({ mode }) => {
       vue(),
       // 支持 JSX、TSX 语法
       vueJsx(),
-      // 公开构建必须从入口移除私有路由；仅把页面放入 private.ts 仍会因静态导入
-      // 被 Rollup 收入产物。这里在解析前替换 private 模块，保留私有构建原样。
-      {
-        name: "remove-private-routes-in-public-build",
-        enforce: "pre",
-        resolveId(id: string) {
-          if (VITE_BUILD_MODE !== "private" && (id === "./routes/private" || id.endsWith("/routes/private"))) return "\0empty-private-routes"
-          return null
-        },
-        load(id: string) {
-          if (id === "\0empty-private-routes") return "export const privateRoutes = [];"
-          return null
-        }
-      },
       // 支持将 SVG 文件导入为 Vue 组件
       svgLoader({
         defaultImport: "url",
