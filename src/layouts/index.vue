@@ -7,7 +7,6 @@ import { useWatermark } from "@@/composables/useWatermark"
 import { isInFreezePeriod } from "@@/config/freeze"
 import { getCssVar, setCssVar } from "@@/utils/css"
 import { useSettingsStore } from "@/pinia/stores/settings"
-import { RightPanel, Settings } from "./components"
 import { useResize } from "./composables/useResize"
 import LeftMode from "./modes/LeftMode.vue"
 import LeftTopMode from "./modes/LeftTopMode.vue"
@@ -20,7 +19,7 @@ const { setWatermark, clearWatermark } = useWatermark()
 const { isMobile } = useDevice()
 const { isLeft, isTop, isLeftTop } = useLayoutMode()
 const settingsStore = useSettingsStore()
-const { showSettings, showTagsView, showWatermark } = storeToRefs(settingsStore)
+const { showTagsView, showWatermark } = storeToRefs(settingsStore)
 
 // 检查是否在冻结期间
 const isFrozen = computed(() => isInFreezePeriod())
@@ -59,11 +58,6 @@ watchEffect(() => {
       <!-- 混合模式 -->
       <LeftTopMode v-else-if="isLeftTop" />
     </div>
-
-    <!-- 右侧设置面板 -->
-    <RightPanel v-if="showSettings">
-      <Settings />
-    </RightPanel>
   </div>
 </template>
 
