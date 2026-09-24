@@ -1,6 +1,6 @@
 import type { PriceStatus } from "@/pinia/stores/game"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getMaterialCostBreakdownOf, getMaterialCostOf } from "@/common/apis/game/craft"
+import { getMaterialCostBreakdownOf, getMaterialCostOf, isMaterialPriceSelectionAvailable } from "@/common/apis/game/craft"
 
 const state = vi.hoisted(() => ({
   artisan: 0.1,
@@ -32,6 +32,7 @@ vi.mock("@/common/config", () => ({
 }))
 
 vi.mock("@/pinia/stores/game", () => ({
+  PriceStatus: { ASK: "ASK", BID: "BID", ASK_LOW: "ASK_LOW", BID_HIGH: "BID_HIGH" },
   useGameStoreOutside: () => ({
     buyStatus: state.buyStatus,
     sellStatus: state.sellStatus,
@@ -96,5 +97,11 @@ describe("single-step manufacture cost", () => {
     expect(getMaterialCostOf("/items/test_item", { "/items/material": "ASK_1" })).toBe(199)
     expect(getMaterialCostOf("/items/test_item", { "/items/material": "BID_1" })).toBe(181)
     expect(getMaterialCostOf("/items/test_item", { "/items/material": "CRAFT" })).toBe(197.2)
+  })
+
+  it("rejects self-craft for a material without a recipe before it hides the parent breakdown", () => {
+    expect(isMaterialPriceSelectionAvailable("/items/material", "CRAFT")).toBe(true)
+    expect(isMaterialPriceSelectionAvailable("/items/raw", "CRAFT")).toBe(false)
+    expect(isMaterialPriceSelectionAvailable("/items/raw", "ASK_1")).toBe(true)
   })
 })

@@ -1,13 +1,23 @@
 import { getActionDetailOf, getPriceOf } from "@/common/apis/game"
 import { getBuffOf } from "@/common/apis/player"
 import { SHOP_FIXED_PRICES } from "@/common/config"
-import { type PriceStatus, useGameStoreOutside } from "@/pinia/stores/game"
+import { PriceStatus, useGameStoreOutside } from "@/pinia/stores/game"
 
 /** 制造系动作（锻造/制造/裁缝），与强化页 calcBestManufacturePlan 同口径 */
 const MANUFACTURE_ACTIONS = ["cheesesmithing", "crafting", "tailoring"] as const
 export type ManufactureAction = typeof MANUFACTURE_ACTIONS[number]
 export type MaterialPriceSource = "market" | "shop" | "craft"
 export type MaterialPriceSelection = PriceStatus | "ASK_1" | "BID_1" | "CRAFT"
+
+/** 只展示能算出有效价格的次级材料选项，避免整条来源成本变为空。 */
+export function isMaterialPriceSelectionAvailable(hrid: string, selection: MaterialPriceSelection): boolean {
+  if (selection === "CRAFT") return getMaterialCostOf(hrid) >= 0
+  if (selection === "ASK_1" || selection === "BID_1") {
+    const side = selection === "ASK_1" ? PriceStatus.ASK : PriceStatus.BID
+    return getPriceOf(hrid, 1, side).ask >= 0
+  }
+  return true
+}
 
 export interface FinalStepMaterialCostItem {
   hrid: string

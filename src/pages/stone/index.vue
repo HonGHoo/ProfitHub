@@ -1,5 +1,4 @@
 <script lang="ts" setup>
-import type { MaterialPriceSelection } from "@/common/apis/game/craft"
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import { useMemory } from "@@/composables/useMemory"
 import * as Format from "@@/utils/format"
@@ -10,6 +9,7 @@ import { useI18n } from "vue-i18n"
 import { TransmuteCalculator } from "@/calculator/alchemy"
 import { computeStoneLeaderboard, type StoneLeaderboardResult, type StoneSourceRow } from "@/calculator/alchemyChain"
 import { getActionDetailOf, getGameDataApi, getItemDetailOf, getPriceOf } from "@/common/apis/game"
+import { isMaterialPriceSelectionAvailable, type MaterialPriceSelection } from "@/common/apis/game/craft"
 import { getBuffOf } from "@/common/apis/player"
 import { usePriceStatus } from "@/common/composables/usePriceStatus"
 import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
@@ -306,6 +306,7 @@ function materialPriceStatusOf(sourceHrid: string, materialHrid: string): Materi
 }
 
 function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status: MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS) {
+  if (status !== GLOBAL_PRICE_STATUS && !isMaterialPriceSelectionAvailable(materialHrid, status)) return
   const next = { ...materialPriceStatusOverrides.value }
   const sourceOverrides = { ...(next[sourceHrid] ?? {}) }
   if (status === GLOBAL_PRICE_STATUS) {
@@ -344,12 +345,25 @@ function compute() {
   // 游戏数据未就绪时跳过，等 marketData watcher 触发
   if (!getGameDataApi() || !gameStore.marketData) return
   try {
+    // 修复旧版本中已保存的无配方自制价或无盘口 +1 价。
+    let cleanedOverrides = materialPriceStatusOverrides.value
+    for (const [source, materials] of Object.entries(materialPriceStatusOverrides.value as Record<string, Record<string, MaterialPriceSelection>>)) {
+      for (const [material, status] of Object.entries(materials)) {
+        if (isMaterialPriceSelectionAvailable(material, status)) continue
+        if (cleanedOverrides === materialPriceStatusOverrides.value) cleanedOverrides = { ...cleanedOverrides }
+        const sourceOverrides = { ...cleanedOverrides[source] }
+        delete sourceOverrides[material]
+        if (Object.keys(sourceOverrides).length) cleanedOverrides[source] = sourceOverrides
+        else delete cleanedOverrides[source]
+      }
+    }
+    if (cleanedOverrides !== materialPriceStatusOverrides.value) materialPriceStatusOverrides.value = cleanedOverrides
     stoneResult.value = computeStoneLeaderboard({
       catalystRank: catalystRank.value,
       sellTaxFactor: includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR,
       includeRare: includeRare.value,
       craftMode: craftMode.value,
-      materialPriceStatusOverrides: materialPriceStatusOverrides.value
+      materialPriceStatusOverrides: cleanedOverrides
     })
   } catch (e) {
     console.error(e)
@@ -581,6 +595,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                         :key="option.value"
                         size="small"
                         :type="materialPriceStatusOf(row.hrid, item.hrid) === option.value ? (option.value === GLOBAL_PRICE_STATUS ? 'primary' : 'success') : ''"
+                        :disabled="option.value !== GLOBAL_PRICE_STATUS && !isMaterialPriceSelectionAvailable(item.hrid, option.value)"
                         @click="setMaterialPriceStatus(row.hrid, item.hrid, option.value)"
                       >
                         {{ option.label }}
