@@ -15,9 +15,11 @@ vi.mock("@/common/apis/game", () => ({
         upgradeItemHrid: "/items/base_item",
         inputItems: [{ itemHrid: "/items/material", count: 10 }]
       }
-    : undefined,
-  getPriceOf: (hrid: string, _level: number, buyStatus: string = state.buyStatus) => ({
-    ask: hrid === "/items/base_item" ? 100 : hrid === "/items/material" ? (buyStatus === "BID" ? 15 : 20) : -1
+    : hrid === "/actions/crafting/material"
+      ? { inputItems: [{ itemHrid: "/items/raw", count: 2 }] }
+      : undefined,
+  getPriceOf: (hrid: string, level: number, buyStatus: string = state.buyStatus) => ({
+    ask: hrid === "/items/base_item" ? 100 : hrid === "/items/raw" ? 6 : hrid === "/items/material" ? (level === 1 ? (buyStatus === "BID" ? 9 : 11) : buyStatus === "BID" ? 15 : 20) : -1
   })
 }))
 
@@ -88,5 +90,11 @@ describe("single-step manufacture cost", () => {
       subtotal: 135,
       priceStatus: "BID"
     })
+  })
+
+  it("uses the selected +1 market side or the material's own crafting cost", () => {
+    expect(getMaterialCostOf("/items/test_item", { "/items/material": "ASK_1" })).toBe(199)
+    expect(getMaterialCostOf("/items/test_item", { "/items/material": "BID_1" })).toBe(181)
+    expect(getMaterialCostOf("/items/test_item", { "/items/material": "CRAFT" })).toBe(197.2)
   })
 })

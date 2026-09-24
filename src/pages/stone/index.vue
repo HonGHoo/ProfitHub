@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import type { MaterialPriceSelection } from "@/common/apis/game/craft"
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import { useMemory } from "@@/composables/useMemory"
 import * as Format from "@@/utils/format"
@@ -26,7 +27,18 @@ const includeRare = useMemory("stone-include-rare", true)
 const craftMode = useMemory("stone-craft-mode", false)
 const stonePriceOverride = useMemory("stone-price-override", null as number | null)
 const fragmentProductPriceOverrides = useMemory("stone-fragment-product-price-overrides", {} as Record<string, number>)
-const materialPriceStatusOverrides = useMemory("stone-material-price-status-overrides", {} as Record<string, Record<string, PriceStatus>>, 0)
+const materialPriceStatusOverrides = useMemory("stone-material-price-status-overrides", {} as Record<string, Record<string, MaterialPriceSelection>>, 0)
+// 旧设置里的「左- / 右+」改为对应盘口，避免隐藏选项继续影响计算。
+const migratedMaterialPrices = Object.fromEntries(Object.entries(materialPriceStatusOverrides.value as Record<string, Record<string, MaterialPriceSelection>>).map(([source, materials]) => [
+  source,
+  Object.fromEntries(Object.entries(materials).map(([material, status]) => [
+    material,
+    status === PriceStatus.ASK_LOW ? PriceStatus.ASK : status === PriceStatus.BID_HIGH ? PriceStatus.BID : status
+  ]))
+])) as Record<string, Record<string, MaterialPriceSelection>>
+if (JSON.stringify(migratedMaterialPrices) !== JSON.stringify(materialPriceStatusOverrides.value)) {
+  materialPriceStatusOverrides.value = migratedMaterialPrices
+}
 const GLOBAL_PRICE_STATUS = "GLOBAL"
 const STONE_HRID = "/items/philosophers_stone"
 const FRAGMENT_HRID = "/items/crushed_philosophers_stone"
@@ -229,12 +241,13 @@ async function copyItemName(hrid: string) {
   }
 }
 
-const materialPriceStatusOptions = computed<Array<{ value: PriceStatus | typeof GLOBAL_PRICE_STATUS, label: string }>>(() => [
+const materialPriceStatusOptions = computed<Array<{ value: MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS, label: string }>>(() => [
   { value: GLOBAL_PRICE_STATUS, label: t("跟随") },
   { value: PriceStatus.ASK, label: t("左") },
-  { value: PriceStatus.ASK_LOW, label: `${t("左")}-` },
   { value: PriceStatus.BID, label: t("右") },
-  { value: PriceStatus.BID_HIGH, label: `${t("右")}+` }
+  { value: "ASK_1", label: t("左一") },
+  { value: "BID_1", label: t("右一") },
+  { value: "CRAFT", label: t("自制") }
 ])
 
 function cancelCostHide() {
@@ -273,24 +286,26 @@ function actionLabel(action: string) {
   return action === "cheesesmithing" ? t("锻造") : action === "tailoring" ? t("裁缝") : t("制造")
 }
 
-function priceStatusLabel(status: PriceStatus) {
-  if (status === PriceStatus.ASK_LOW) return `${t("左")}-`
+function priceStatusLabel(status: MaterialPriceSelection) {
+  if (status === "ASK_1") return t("左一")
+  if (status === "BID_1") return t("右一")
+  if (status === "CRAFT") return t("自制")
   if (status === PriceStatus.BID) return t("右")
-  if (status === PriceStatus.BID_HIGH) return `${t("右")}+`
   return t("左")
 }
 
-function priceSourceLabel(source: string, status: PriceStatus) {
+function priceSourceLabel(source: string, status: MaterialPriceSelection) {
   if (source === "shop") return t("商店固定价")
+  if (status === "CRAFT") return t("自制")
   if (source === "craft") return t("制造价回退")
   return `${t("市场价")} · ${priceStatusLabel(status)}`
 }
 
-function materialPriceStatusOf(sourceHrid: string, materialHrid: string): PriceStatus | typeof GLOBAL_PRICE_STATUS {
+function materialPriceStatusOf(sourceHrid: string, materialHrid: string): MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS {
   return materialPriceStatusOverrides.value[sourceHrid]?.[materialHrid] ?? GLOBAL_PRICE_STATUS
 }
 
-function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status: PriceStatus | typeof GLOBAL_PRICE_STATUS) {
+function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status: MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS) {
   const next = { ...materialPriceStatusOverrides.value }
   const sourceOverrides = { ...(next[sourceHrid] ?? {}) }
   if (status === GLOBAL_PRICE_STATUS) {

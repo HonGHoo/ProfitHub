@@ -7,6 +7,7 @@ import { type PriceStatus, useGameStoreOutside } from "@/pinia/stores/game"
 const MANUFACTURE_ACTIONS = ["cheesesmithing", "crafting", "tailoring"] as const
 export type ManufactureAction = typeof MANUFACTURE_ACTIONS[number]
 export type MaterialPriceSource = "market" | "shop" | "craft"
+export type MaterialPriceSelection = PriceStatus | "ASK_1" | "BID_1" | "CRAFT"
 
 export interface FinalStepMaterialCostItem {
   hrid: string
@@ -18,7 +19,7 @@ export interface FinalStepMaterialCostItem {
   subtotal: number
   artisanApplied: boolean
   priceSource: MaterialPriceSource
-  priceStatus: PriceStatus
+  priceStatus: MaterialPriceSelection
 }
 
 export interface FinalStepMaterialCostBreakdown {
@@ -89,16 +90,23 @@ export function getCraftCostOf(hrid: string): number {
  * 输入材料应用当前预设的工匠节省；材料缺价时依次回退商店固定价、制造成本。
  * 多配方取最便宜，无制造配方返回 -1。
  */
-function resolveMaterialPrice(hrid: string, priceStatus: PriceStatus): { price: number, source: MaterialPriceSource } {
+function resolveMaterialPrice(hrid: string, priceStatus: MaterialPriceSelection): { price: number, source: MaterialPriceSource } {
   const gameStore = useGameStoreOutside()
-  const marketAsk = getPriceOf(hrid, 0, priceStatus, gameStore.sellStatus).ask
+  if (priceStatus === "CRAFT") {
+    return { price: getMaterialCostOf(hrid), source: "craft" }
+  }
+  const level = priceStatus === "ASK_1" || priceStatus === "BID_1" ? 1 : 0
+  const side = priceStatus === "BID_1" ? "BID" : priceStatus === "ASK_1" ? "ASK" : priceStatus
+  const marketAsk = getPriceOf(hrid, level, side as PriceStatus, gameStore.sellStatus).ask
   if (marketAsk >= 0) return { price: marketAsk, source: "market" }
+  // 指定 +1 档时只使用该档报价，避免无单时悄悄回退为 0 档或其他价格。
+  if (level === 1) return { price: -1, source: "market" }
   const shopPrice = SHOP_FIXED_PRICES[hrid]
   if (typeof shopPrice === "number") return { price: shopPrice, source: "shop" }
   return { price: getCraftCostOf(hrid), source: "craft" }
 }
 
-function finalStepMaterialCost(hrid: string, priceStatusOverrides: Record<string, PriceStatus>): FinalStepMaterialCostBreakdown | null {
+function finalStepMaterialCost(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection>): FinalStepMaterialCostBreakdown | null {
   const gameStore = useGameStoreOutside()
   const key = hrid.substring(hrid.lastIndexOf("/") + 1)
   let best: FinalStepMaterialCostBreakdown | null = null
@@ -156,7 +164,7 @@ function finalStepMaterialCost(hrid: string, priceStatusOverrides: Record<string
 
 const materialCostCache = new Map<string, FinalStepMaterialCostBreakdown | null>()
 
-export function getMaterialCostBreakdownOf(hrid: string, priceStatusOverrides: Record<string, PriceStatus> = {}): FinalStepMaterialCostBreakdown | null {
+export function getMaterialCostBreakdownOf(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection> = {}): FinalStepMaterialCostBreakdown | null {
   const gameStore = useGameStoreOutside()
   const ts = gameStore.marketData?.timestamp ?? 0
   const artisanKey = MANUFACTURE_ACTIONS.map(action => getBuffOf(action, "Artisan")).join("|")
@@ -169,6 +177,6 @@ export function getMaterialCostBreakdownOf(hrid: string, priceStatusOverrides: R
   return value
 }
 
-export function getMaterialCostOf(hrid: string, priceStatusOverrides: Record<string, PriceStatus> = {}): number {
+export function getMaterialCostOf(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection> = {}): number {
   return getMaterialCostBreakdownOf(hrid, priceStatusOverrides)?.total ?? -1
 }

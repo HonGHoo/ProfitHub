@@ -1,12 +1,12 @@
 import type Calculator from "."
 import type { AlchemyCalculatorConfig } from "@/calculator/alchemy"
-import type { FinalStepMaterialCostBreakdown } from "@/common/apis/game/craft"
+import type { FinalStepMaterialCostBreakdown, MaterialPriceSelection } from "@/common/apis/game/craft"
 import type { ItemDetail } from "~/game"
 import { CoinifyCalculator, DecomposeCalculator, TransmuteCalculator } from "@/calculator/alchemy"
 import { getGameDataApi, getItemDetailOf, getPriceOf } from "@/common/apis/game"
 import { getCraftCostOf, getMaterialCostBreakdownOf } from "@/common/apis/game/craft"
 import { getTrans } from "@/locales"
-import { COIN_HRID, type PriceStatus } from "@/pinia/stores/game"
+import { COIN_HRID } from "@/pinia/stores/game"
 
 type AlchemyCtor = new (config: AlchemyCalculatorConfig) => Calculator & { available: boolean, run: () => Calculator }
 
@@ -351,7 +351,7 @@ export interface StoneLeaderboardResult {
  * 贤者之石获取排行：扫全部物品，找转化掉落表/分解产物里含贤者之石的来源，
  * 复用转化/分解计算器（含催化剂成本、稀有掉落、税），按单颗净成本升序。
  */
-export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean, materialPriceStatusOverrides?: Record<string, Record<string, PriceStatus>> }): StoneLeaderboardResult {
+export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean, materialPriceStatusOverrides?: Record<string, Record<string, MaterialPriceSelection>> }): StoneLeaderboardResult {
   const gameData = getGameDataApi()
   const stoneBid = getPriceOf(STONE_HRID, 0).bid
   const stoneAsk = getPriceOf(STONE_HRID, 0).ask
