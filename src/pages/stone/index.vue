@@ -142,14 +142,8 @@ function materialCountText(row: StoneSourceRow, index: number) {
   return `${Format.number(item.baseCount, 2)} × ${Format.percent(1 - row.craftBreakdown.artisanBuff)} = ${Format.number(item.count, 2)}`
 }
 
-const legendLines = [
-  t("概率：每做一次转化/分解，真的掉出贤者之石的概率。转化本身有成功率（失败则材料全没），已一并算进去。"),
-  t("买价：去市场买这件来源物品要花的钱。带「自制」标签 = 按材料成本计：市场没人卖时的回退，或勾选「买材料自制」后的计价方式。"),
-  t("买材料自制：与强化页「单步配方」同口径，按最终制造步骤的一次材料成本计价（包含当前预设的工匠节省），不递归计算更早步骤，并重排排行榜；买价列同时显示市场买价（划线）供对比。"),
-  t("副产物抵扣：做一次不只出石头，还会搭着出别的东西，这些搭头卖掉（扣 5% 税）能回收的钱，直接从成本里减。例：耳环买价 500M，附带 7 只小耳环回收 31M，净投入就是 469M。"),
-  t("单颗净成本：（买价 + 催化剂 − 副产物抵扣）÷ 平均每次出几颗，即搞到一颗石头实际花的钱。排行榜按它从便宜到贵排。"),
-  t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
-]
+const costPerStoneTooltip = t("单颗净成本：（买价 + 催化剂 − 副产物抵扣）÷ 平均每次出几颗，即搞到一颗石头实际花的钱。排行榜按它从便宜到贵排。")
+const priceDifferenceTooltip = t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
 
 function catalystHridOf(row: { method: string, catalystRankUsed: number }): string | null {
   if (row.catalystRankUsed === 2) return "/items/prime_catalyst"
@@ -225,14 +219,6 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
         <el-checkbox v-model="includeRare" :label="t('稀有掉落')" />
         <el-checkbox v-model="craftMode" :label="t('买材料自制')" />
       </div>
-      <div class="font-size-12px color-gray-500" style="line-height: 2; margin-top: 8px">
-        <div class="font-bold">
-          {{ t('名词说明') }}
-        </div>
-        <div v-for="line in legendLines" :key="line">
-          · {{ line }}
-        </div>
-      </div>
     </el-card>
 
     <el-card v-if="stoneResult" class="mt-4">
@@ -246,11 +232,6 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
         </div>
       </template>
       <el-table :data="stoneResult.rows" size="small" max-height="560">
-        <el-table-column :label="t('排名')" align="center" width="60">
-          <template #default="{ $index }">
-            {{ $index + 1 }}
-          </template>
-        </el-table-column>
         <el-table-column :label="t('来源物品')" min-width="170">
           <template #default="{ row }">
             <el-popover
@@ -291,13 +272,14 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                 @mouseenter="showCostPopover(row.hrid)"
                 @mouseleave="scheduleCostHide(row.hrid)"
               >
-                <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="cost-popover-header">
                   <div class="flex items-center gap-1 font-bold">
                     <ItemIcon :hrid="row.hrid" :width="22" :height="22" />
                     {{ itemName(row.hrid) }} · {{ t('单步制作成本') }}
                   </div>
                   <el-button
                     v-if="pinnedCostHrid === row.hrid"
+                    class="cost-popover-close"
                     link
                     circle
                     size="small"
@@ -394,7 +376,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
             <el-tooltip placement="top" effect="light">
               <template #content>
                 <div style="max-width: 320px">
-                  {{ legendLines[4] }}
+                  {{ costPerStoneTooltip }}
                 </div>
               </template>
               <div style="display: flex; justify-content: flex-end; align-items: center; gap: 5px">
@@ -412,7 +394,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
             <el-tooltip placement="top" effect="light">
               <template #content>
                 <div style="max-width: 320px">
-                  {{ legendLines[5] }}
+                  {{ priceDifferenceTooltip }}
                 </div>
               </template>
               <div style="display: flex; justify-content: flex-end; align-items: center; gap: 5px">
@@ -434,6 +416,25 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
 </template>
 
 <style scoped>
+.cost-popover {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cost-popover-header {
+  position: relative;
+  min-height: 24px;
+  padding-right: 28px;
+  margin-bottom: 8px;
+}
+
+.cost-popover-close {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
+
 .cost-name-trigger {
   width: fit-content;
   cursor: pointer;
