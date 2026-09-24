@@ -326,6 +326,12 @@ function hasCustomMaterialPrice(sourceHrid: string) {
   return Object.keys(materialPriceStatusOverrides.value[sourceHrid] ?? {}).length > 0
 }
 
+const hasMaterialPriceOverrides = computed(() => Object.keys(materialPriceStatusOverrides.value).length > 0)
+
+function resetMaterialPriceStatuses() {
+  materialPriceStatusOverrides.value = {}
+}
+
 function materialCountText(row: StoneSourceRow, index: number) {
   const item = row.craftBreakdown?.items[index]
   if (!item) return "—"
@@ -348,7 +354,7 @@ function compute() {
   // 游戏数据未就绪时跳过，等 marketData watcher 触发
   if (!getGameDataApi() || !gameStore.marketData) return
   try {
-    // 修复旧版本中已保存的无配方自制价或无盘口 +1 价。
+    // 清理旧版本中已保存但无法计算的自制价。
     let cleanedOverrides = materialPriceStatusOverrides.value
     for (const [source, materials] of Object.entries(materialPriceStatusOverrides.value as Record<string, Record<string, MaterialPriceSelection>>)) {
       for (const [material, status] of Object.entries(materials)) {
@@ -402,6 +408,9 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
       </template>
       <div class="flex flex-wrap items-center gap-4">
         <PriceStatusSelect @change="handlePriceStatusChange" />
+        <el-button size="small" :disabled="!hasMaterialPriceOverrides" @click="resetMaterialPriceStatuses">
+          {{ t('重置物品选价') }}
+        </el-button>
         <div class="flex items-center flex-wrap gap-2">
           <span>{{ t('催化剂') }}</span>
           <el-radio-group v-model="catalystRank" size="small">

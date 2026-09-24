@@ -17,6 +17,7 @@ export default {
   "布局配置": "Layout Config",
   "功能配置": "Function Config",
   "重置": "Reset",
+  "重置物品选价": "Reset Item Prices",
 
   "显示标签栏": "Show Tags View",
   "显示 Logo": "Show Logo",
