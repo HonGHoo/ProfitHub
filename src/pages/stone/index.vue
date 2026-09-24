@@ -2,7 +2,7 @@
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import { useMemory } from "@@/composables/useMemory"
 import * as Format from "@@/utils/format"
-import { CopyDocument, Warning } from "@element-plus/icons-vue"
+import { Close, CopyDocument, Warning } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
@@ -151,10 +151,6 @@ const legendLines = [
   t("价差：贤者之石现价（税后到手）− 单颗净成本。绿色 = 自己做再卖比直接买一颗便宜，赚的就是这个数；红色 = 不如直接买。")
 ]
 
-function fmtStones(v: number) {
-  return `${(v * 100).toFixed(1)}%`
-}
-
 function catalystHridOf(row: { method: string, catalystRankUsed: number }): string | null {
   if (row.catalystRankUsed === 2) return "/items/prime_catalyst"
   if (row.catalystRankUsed === 1) {
@@ -259,7 +255,8 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
           <template #default="{ row }">
             <el-popover
               :visible="isCostPopoverVisible(row.hrid)"
-              placement="right-start"
+              placement="bottom-start"
+              :fallback-placements="['top-start']"
               :width="760"
               :persistent="true"
             >
@@ -299,8 +296,16 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                     <ItemIcon :hrid="row.hrid" :width="22" :height="22" />
                     {{ itemName(row.hrid) }} · {{ t('单步制作成本') }}
                   </div>
-                  <el-button v-if="pinnedCostHrid === row.hrid" link size="small" @click="closeCostPopover(row.hrid)">
-                    {{ t('关闭') }}
+                  <el-button
+                    v-if="pinnedCostHrid === row.hrid"
+                    link
+                    circle
+                    size="small"
+                    :title="t('关闭')"
+                    :aria-label="t('关闭')"
+                    @click="closeCostPopover(row.hrid)"
+                  >
+                    <el-icon><Close /></el-icon>
                   </el-button>
                 </div>
                 <template v-if="row.craftBreakdown">
@@ -359,29 +364,6 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
             </el-popover>
           </template>
         </el-table-column>
-        <el-table-column :label="t('途径')" align="center" width="70">
-          <template #default="{ row }">
-            {{ row.method === 'transmute' ? t('转化') : t('分解') }}
-          </template>
-        </el-table-column>
-        <el-table-column align="center" width="90">
-          <template #header>
-            <el-tooltip placement="top" effect="light">
-              <template #content>
-                <div style="max-width: 320px">
-                  {{ legendLines[0] }}
-                </div>
-              </template>
-              <div style="display: flex; justify-content: center; align-items: center; gap: 5px">
-                <div>{{ t('概率') }}</div>
-                <el-icon><Warning /></el-icon>
-              </div>
-            </el-tooltip>
-          </template>
-          <template #default="{ row }">
-            {{ fmtStones(row.stonesPerAction) }}
-          </template>
-        </el-table-column>
         <el-table-column :label="t('催化剂')" align="center" width="70">
           <template #default="{ row }">
             <span v-if="catalystHridOf(row)" class="flex items-center justify-center">
@@ -405,24 +387,6 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                 {{ Format.price(row.marketAsk) }}
               </span>
             </span>
-          </template>
-        </el-table-column>
-        <el-table-column align="right" width="120">
-          <template #header>
-            <el-tooltip placement="top" effect="light">
-              <template #content>
-                <div style="max-width: 320px">
-                  {{ legendLines[3] }}
-                </div>
-              </template>
-              <div style="display: flex; justify-content: flex-end; align-items: center; gap: 5px">
-                <div>{{ t('副产物抵扣') }}</div>
-                <el-icon><Warning /></el-icon>
-              </div>
-            </el-tooltip>
-          </template>
-          <template #default="{ row }">
-            {{ Format.price(row.byproductIncome) }}
           </template>
         </el-table-column>
         <el-table-column align="right" width="130">
