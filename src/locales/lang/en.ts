@@ -552,8 +552,6 @@ export default {
   "该物品没有可计算的单步制造配方。": "This item has no available single-step crafting recipe.",
   "左": "L",
   "右": "R",
-  "左一": "L+1",
-  "右一": "R+1",
   "选价": "Price Mode",
   "自": "C",
   "买材料自制": "Craft from materials",

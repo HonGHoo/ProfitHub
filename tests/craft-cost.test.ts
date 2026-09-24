@@ -18,8 +18,8 @@ vi.mock("@/common/apis/game", () => ({
     : hrid === "/actions/crafting/material"
       ? { inputItems: [{ itemHrid: "/items/raw", count: 2 }] }
       : undefined,
-  getPriceOf: (hrid: string, level: number, buyStatus: string = state.buyStatus) => ({
-    ask: hrid === "/items/base_item" ? 100 : hrid === "/items/raw" ? 6 : hrid === "/items/material" ? (level === 1 ? (buyStatus === "BID" ? 9 : 11) : buyStatus === "BID" ? 15 : 20) : -1
+  getPriceOf: (hrid: string, _level: number, buyStatus: string = state.buyStatus) => ({
+    ask: hrid === "/items/base_item" ? 100 : hrid === "/items/raw" ? (buyStatus === "BID" ? 4 : 6) : hrid === "/items/material" ? (buyStatus === "BID" ? 15 : 20) : -1
   })
 }))
 
@@ -93,15 +93,20 @@ describe("single-step manufacture cost", () => {
     })
   })
 
-  it("uses the selected +1 market side or the material's own crafting cost", () => {
-    expect(getMaterialCostOf("/items/test_item", { "/items/material": "ASK_1" })).toBe(199)
-    expect(getMaterialCostOf("/items/test_item", { "/items/material": "BID_1" })).toBe(181)
-    expect(getMaterialCostOf("/items/test_item", { "/items/material": "CRAFT" })).toBe(197.2)
+  it("prices a secondary item from either side of its own recipe", () => {
+    expect(getMaterialCostOf("/items/test_item", { "/items/material": "CRAFT_ASK" })).toBe(197.2)
+    expect(getMaterialCostOf("/items/test_item", { "/items/material": "CRAFT_BID" })).toBe(164.8)
+    expect(getMaterialCostBreakdownOf("/items/test_item", { "/items/material": "CRAFT_BID" })?.items[1]).toMatchObject({
+      unitPrice: 7.2,
+      priceSource: "craft",
+      priceStatus: "CRAFT_BID"
+    })
   })
 
   it("rejects self-craft for a material without a recipe before it hides the parent breakdown", () => {
-    expect(isMaterialPriceSelectionAvailable("/items/material", "CRAFT")).toBe(true)
-    expect(isMaterialPriceSelectionAvailable("/items/raw", "CRAFT")).toBe(false)
-    expect(isMaterialPriceSelectionAvailable("/items/raw", "ASK_1")).toBe(true)
+    expect(isMaterialPriceSelectionAvailable("/items/material", "CRAFT_ASK")).toBe(true)
+    expect(isMaterialPriceSelectionAvailable("/items/material", "CRAFT_BID")).toBe(true)
+    expect(isMaterialPriceSelectionAvailable("/items/raw", "CRAFT_ASK")).toBe(false)
+    expect(isMaterialPriceSelectionAvailable("/items/raw", "CRAFT_BID")).toBe(false)
   })
 })

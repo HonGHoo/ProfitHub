@@ -28,18 +28,23 @@ const craftMode = useMemory("stone-craft-mode", false)
 const stonePriceOverride = useMemory("stone-price-override", null as number | null)
 const fragmentProductPriceOverrides = useMemory("stone-fragment-product-price-overrides", {} as Record<string, number>)
 const materialPriceStatusOverrides = useMemory("stone-material-price-status-overrides", {} as Record<string, Record<string, MaterialPriceSelection>>, 0)
-// 旧设置里的「左- / 右+」改为对应盘口，避免隐藏选项继续影响计算。
-const migratedMaterialPrices = Object.fromEntries(Object.entries(materialPriceStatusOverrides.value as Record<string, Record<string, MaterialPriceSelection>>).map(([source, materials]) => [
+// 旧选项迁移到市场左/右与自制左/右。
+const migratedMaterialPrices = Object.fromEntries(Object.entries(materialPriceStatusOverrides.value as Record<string, Record<string, string>>).map(([source, materials]) => [
   source,
   Object.fromEntries(Object.entries(materials).map(([material, status]) => [
     material,
-    status === PriceStatus.ASK_LOW ? PriceStatus.ASK : status === PriceStatus.BID_HIGH ? PriceStatus.BID : status
+    status === PriceStatus.ASK_LOW
+      ? PriceStatus.ASK
+      : status === PriceStatus.BID_HIGH
+        ? PriceStatus.BID
+        : status === "ASK_1" || status === "CRAFT"
+          ? "CRAFT_ASK"
+          : status === "BID_1" ? "CRAFT_BID" : status
   ]))
 ])) as Record<string, Record<string, MaterialPriceSelection>>
 if (JSON.stringify(migratedMaterialPrices) !== JSON.stringify(materialPriceStatusOverrides.value)) {
   materialPriceStatusOverrides.value = migratedMaterialPrices
 }
-const GLOBAL_PRICE_STATUS = "GLOBAL"
 const STONE_HRID = "/items/philosophers_stone"
 const FRAGMENT_HRID = "/items/crushed_philosophers_stone"
 
@@ -241,13 +246,11 @@ async function copyItemName(hrid: string) {
   }
 }
 
-const materialPriceStatusOptions = computed<Array<{ value: MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS, label: string }>>(() => [
-  { value: GLOBAL_PRICE_STATUS, label: t("跟随") },
-  { value: PriceStatus.ASK, label: t("左") },
-  { value: PriceStatus.BID, label: t("右") },
-  { value: "ASK_1", label: t("左一") },
-  { value: "BID_1", label: t("右一") },
-  { value: "CRAFT", label: t("自制") }
+const materialPriceStatusOptions = computed<Array<{ value: MaterialPriceSelection, label: string, source: string }>>(() => [
+  { value: PriceStatus.ASK, label: t("左"), source: t("市场价") },
+  { value: PriceStatus.BID, label: t("右"), source: t("市场价") },
+  { value: "CRAFT_ASK", label: t("左"), source: t("自制") },
+  { value: "CRAFT_BID", label: t("右"), source: t("自制") }
 ])
 
 function cancelCostHide() {
@@ -287,29 +290,29 @@ function actionLabel(action: string) {
 }
 
 function priceStatusLabel(status: MaterialPriceSelection) {
-  if (status === "ASK_1") return t("左一")
-  if (status === "BID_1") return t("右一")
-  if (status === "CRAFT") return t("自制")
+  if (status === "CRAFT_ASK") return `${t("自制")} · ${t("左")}`
+  if (status === "CRAFT_BID") return `${t("自制")} · ${t("右")}`
   if (status === PriceStatus.BID) return t("右")
   return t("左")
 }
 
 function priceSourceLabel(source: string, status: MaterialPriceSelection) {
   if (source === "shop") return t("商店固定价")
-  if (status === "CRAFT") return t("自制")
+  if (status === "CRAFT_ASK" || status === "CRAFT_BID") return priceStatusLabel(status)
   if (source === "craft") return t("制造价回退")
   return `${t("市场价")} · ${priceStatusLabel(status)}`
 }
 
-function materialPriceStatusOf(sourceHrid: string, materialHrid: string): MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS {
-  return materialPriceStatusOverrides.value[sourceHrid]?.[materialHrid] ?? GLOBAL_PRICE_STATUS
+function materialPriceStatusOf(sourceHrid: string, materialHrid: string): MaterialPriceSelection {
+  const status = materialPriceStatusOverrides.value[sourceHrid]?.[materialHrid] ?? gameStore.buyStatus
+  return status === PriceStatus.BID || status === PriceStatus.BID_HIGH ? PriceStatus.BID : status === PriceStatus.ASK_LOW ? PriceStatus.ASK : status
 }
 
-function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status: MaterialPriceSelection | typeof GLOBAL_PRICE_STATUS) {
-  if (status !== GLOBAL_PRICE_STATUS && !isMaterialPriceSelectionAvailable(materialHrid, status)) return
+function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status: MaterialPriceSelection) {
+  if (!isMaterialPriceSelectionAvailable(materialHrid, status)) return
   const next = { ...materialPriceStatusOverrides.value }
   const sourceOverrides = { ...(next[sourceHrid] ?? {}) }
-  if (status === GLOBAL_PRICE_STATUS) {
+  if (sourceOverrides[materialHrid] === status) {
     delete sourceOverrides[materialHrid]
   } else {
     sourceOverrides[materialHrid] = status
@@ -590,16 +593,19 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                     </span>
                     <span>{{ Format.money(item.subtotal) }}</span>
                     <span class="price-status-buttons">
-                      <el-button
-                        v-for="option in materialPriceStatusOptions"
-                        :key="option.value"
-                        size="small"
-                        :type="materialPriceStatusOf(row.hrid, item.hrid) === option.value ? (option.value === GLOBAL_PRICE_STATUS ? 'primary' : 'success') : ''"
-                        :disabled="option.value !== GLOBAL_PRICE_STATUS && !isMaterialPriceSelectionAvailable(item.hrid, option.value)"
-                        @click="setMaterialPriceStatus(row.hrid, item.hrid, option.value)"
-                      >
-                        {{ option.label }}
-                      </el-button>
+                      <template v-for="option in materialPriceStatusOptions" :key="option.value">
+                        <span v-if="option.value === 'CRAFT_ASK'" class="price-status-separator">丨</span>
+                        <el-button
+                          size="small"
+                          :title="`${option.source} · ${option.label}`"
+                          :aria-label="`${option.source} · ${option.label}`"
+                          :type="materialPriceStatusOf(row.hrid, item.hrid) === option.value ? 'success' : ''"
+                          :disabled="!isMaterialPriceSelectionAvailable(item.hrid, option.value)"
+                          @click="setMaterialPriceStatus(row.hrid, item.hrid, option.value)"
+                        >
+                          {{ option.label }}
+                        </el-button>
+                      </template>
                     </span>
                   </div>
                   <div class="flex justify-end items-center gap-3 mt-2 font-bold">
@@ -828,14 +834,18 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
 .price-status-buttons {
   display: flex;
   flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
 }
 
 .price-status-buttons :deep(.el-button) {
   min-width: 38px;
   padding-inline: 7px;
+  margin-left: 0;
 }
 
-.price-status-buttons :deep(.el-button + .el-button) {
-  margin-left: 3px;
+.price-status-separator {
+  color: var(--el-text-color-placeholder);
+  margin-inline: 3px;
 }
 </style>
