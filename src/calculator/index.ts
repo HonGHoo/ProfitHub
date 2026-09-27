@@ -24,6 +24,8 @@ export interface CalculatorConfig {
   sellTaxFactor?: number
   /** false 时产物剔除稀有掉落与额外精华掉落（采集/炼金系），默认 true */
   includeRare?: boolean
+  /** 仅本次计算使用的原料单价；工作流内部产物仍优先按零成本抵消。 */
+  ingredientPriceOverrides?: Record<string, number>
 }
 export default abstract class Calculator {
   hrid: string
@@ -105,7 +107,9 @@ export default abstract class Calculator {
       if (!priceConfig?.immutable && hasManualPrice) {
         this.hasManualPrice = true
       }
-      let price = priceConfig?.immutable ? priceConfig.price! : hasManualPrice ? manualPrice! : item.marketPrice
+      let price = priceConfig?.immutable
+        ? priceConfig.price!
+        : this.config.ingredientPriceOverrides?.[item.hrid] ?? (hasManualPrice ? manualPrice! : item.marketPrice)
       // 买价侧无卖单 → 回退制造成本（买不到就自己造）；卖价侧保持 -1（卖不掉不能拿成本冒充市价）
       if (price < 0 && type === "ask") {
         const craft = getCraftCostOf(item.hrid)

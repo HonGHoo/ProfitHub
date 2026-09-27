@@ -706,5 +706,19 @@ export default {
   "单步配方": "Single-step recipe",
   "火车（从头做）": "Train (from scratch)",
   "制作原料": "Craft ingredients",
-  "制作步骤": "Craft steps"
+  "制作步骤": "Craft steps",
+  "首饰工时": "Jewelry Wage",
+  "贤者之石右收价": "Stone bid price",
+  "贤者碎期望单价": "Expected crushed stone price",
+  "星碎期望单价": "Expected star fragment price",
+  "保护镜期望单价": "Expected protection mirror price",
+  "搜索首饰": "Search jewelry",
+  "全部首饰": "All jewelry",
+  "强化等级": "Enhancement level",
+  "重新计算": "Recalculate",
+  "成本/h": "Cost/h",
+  "收入/h": "Income/h",
+  "当前筛选下没有可计算的首饰方案": "No calculable jewelry plans match these filters",
+  "贤者之石缺少右收价或制作、转化原料缺价": "Missing stone bid or crafting/transmutation input prices",
+  "以贤者之石右收价为起点：制作贤者碎、转化星碎和保护镜，分别用完整投入除以该产物期望数量定价。下表沿用打野页的制作与强化收益算法；首饰制作时间计入工时，贤者石的制作与转化时间不计入。": "Starting from the stone bid: craft crushed stones and transmute star fragments and protection mirrors. Each expected unit price divides the full input cost by that output's expected quantity. The table uses Jungle's crafting and enhancement profit calculation. Jewelry crafting time is included; stone crafting and transmutation time is excluded."
 }
