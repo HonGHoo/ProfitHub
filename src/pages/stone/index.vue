@@ -18,6 +18,7 @@ import { usePlayerStore } from "@/pinia/stores/player"
 import ActionConfig from "../dashboard/components/ActionConfig.vue"
 import GameInfo from "../dashboard/components/GameInfo.vue"
 import PriceStatusSelect from "../dashboard/components/PriceStatusSelect.vue"
+import JewelryWageDialog from "./JewelryWageDialog.vue"
 
 const { t } = useI18n()
 
@@ -58,6 +59,7 @@ function handlePriceStatusChange() {
 const gameStore = useGameStore()
 const playerStore = usePlayerStore()
 const stoneResult = ref<StoneLeaderboardResult | null>(null)
+const jewelryDialogVisible = ref(false)
 const stonePriceInput = ref("")
 const productPriceInputs = ref<Record<string, string>>({})
 const hoveredCostHrid = ref<string | null>(null)
@@ -404,6 +406,9 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
             <ItemIcon hrid="/items/philosophers_stone" :width="22" :height="22" />
             <span>{{ t('贤者路径计算') }}</span>
           </div>
+          <el-button type="primary" plain @click="jewelryDialogVisible = true">
+            {{ t('首饰') }}
+          </el-button>
         </div>
       </template>
       <div class="flex flex-wrap items-center gap-4">
@@ -696,6 +701,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
         </el-table-column>
       </el-table>
     </el-card>
+    <JewelryWageDialog v-model="jewelryDialogVisible" />
   </div>
 </template>
 

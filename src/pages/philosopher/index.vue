@@ -16,7 +16,6 @@ import { useEnhancerStore } from "@/pinia/stores/enhancer"
 import { COIN_HRID } from "@/pinia/stores/game"
 import ActionConfig from "../dashboard/components/ActionConfig.vue"
 import GameInfo from "../dashboard/components/GameInfo.vue"
-import JewelryWageDialog from "./JewelryWageDialog.vue"
 
 interface IngredientRow {
   hrid: string
@@ -109,7 +108,6 @@ const { t } = useI18n()
 const enhancerStore = useEnhancerStore()
 
 const dialogVisible = ref(false)
-const jewelryDialogVisible = ref(false)
 const search = ref("")
 const targetLevel = useMemory("philosopher-target-level", 18)
 const useBlessedInPhilosopher = useMemory("philosopher-use-blessed-in-philosopher", false)
@@ -890,9 +888,6 @@ const planChildren = computed(() => {
       <div>
         <ActionConfig :actions="['enhancing']" :equipments="['hands', 'neck', 'earrings', 'ring', 'pouch']" />
       </div>
-      <el-button type="primary" plain @click="jewelryDialogVisible = true">
-        {{ t('首饰') }}
-      </el-button>
     </div>
 
     <el-row :gutter="20" class="row max-w-1100px mx-auto!">
@@ -1404,7 +1399,6 @@ const planChildren = computed(() => {
         </el-button>
       </div>
     </el-dialog>
-    <JewelryWageDialog v-model="jewelryDialogVisible" />
   </div>
 </template>
 
