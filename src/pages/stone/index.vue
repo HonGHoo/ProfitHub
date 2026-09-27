@@ -395,7 +395,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
     <div class="game-info">
       <GameInfo />
       <div>
-        <ActionConfig :actions="['alchemy']" />
+        <ActionConfig :actions="['alchemy', 'crafting', 'enhancing']" :equipments="['off_hand', 'hands', 'neck', 'earrings', 'ring', 'pouch']" />
       </div>
     </div>
 

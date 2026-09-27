@@ -17,7 +17,8 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
   const { setActivePinia } = await import("pinia")
   const { useGameStore, updateMarketData } = await import("@/pinia/stores/game")
   const { usePlayerStore, defaultActionConfig } = await import("@/pinia/stores/player")
-  const { getPriceOf } = await import("@/common/apis/game")
+  const { clearEnhancelateCache, getPriceOf } = await import("@/common/apis/game")
+  const { getBuffOf, runWithPlayerContext } = await import("@/common/apis/player")
   const { PriceStatus } = await import("@/pinia/stores/game")
   const {
     calculateExpectedJewelryMaterialPrices,
@@ -66,4 +67,28 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
     expect(rows[0].lowJewelry.some(item => item.unitCost !== getPriceOf(item.hrid).ask)).toBe(true)
     expect(rows.every(row => row.craftHours > rows[0].lowJewelry.reduce((sum, item) => sum + item.hours, 0))).toBe(true)
   }
+
+  const weakConfig = defaultActionConfig("weak enhancer", "#409eff")
+  weakConfig.actionConfigMap.get("enhancing")!.tool = {
+    type: "enhancing_tool",
+    hrid: "/items/cheese_enhancer",
+    enhanceLevel: 0
+  }
+  const strongConfig = defaultActionConfig("strong enhancer", "#409eff")
+  strongConfig.actionConfigMap.get("enhancing")!.tool = {
+    type: "enhancing_tool",
+    hrid: "/items/celestial_enhancer",
+    enhanceLevel: 20
+  }
+  const weakSuccess = runWithPlayerContext(weakConfig, () => getBuffOf("enhancing", "Success"))
+  const strongSuccess = runWithPlayerContext(strongConfig, () => getBuffOf("enhancing", "Success"))
+  expect(strongSuccess).toBeGreaterThan(weakSuccess)
+  clearEnhancelateCache()
+  const weakRow = runWithPlayerContext(weakConfig, () => calculatePhilosopherJewelryWages(PHILOSOPHER_JEWELRY[0], prices!).find(row => row.enhanceLevel === 10))
+  clearEnhancelateCache()
+  const strongRow = runWithPlayerContext(strongConfig, () => calculatePhilosopherJewelryWages(PHILOSOPHER_JEWELRY[0], prices!).find(row => row.enhanceLevel === 10))
+  expect(weakRow).toBeDefined()
+  expect(strongRow).toBeDefined()
+  expect(strongRow!.actions).toBeLessThan(weakRow!.actions)
+  expect(strongRow!.craftedCost).toBeCloseTo(weakRow!.craftedCost)
 }, 60000)

@@ -2,7 +2,8 @@
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import * as Format from "@@/utils/format"
 import { calculateExpectedJewelryMaterialPrices, calculatePhilosopherJewelryWages, type ExpectedJewelryMaterialPrices, PHILOSOPHER_JEWELRY, type PhilosopherJewelryWageRow } from "@/calculator/philosopherJewelry"
-import { getItemDetailOf } from "@/common/apis/game"
+import { clearEnhancelateCache, getItemDetailOf } from "@/common/apis/game"
+import { runWithPlayerContext } from "@/common/apis/player"
 import { getEquipmentTypeOf } from "@/common/utils/game"
 import { useGameStore } from "@/pinia/stores/game"
 import { usePlayerStore } from "@/pinia/stores/player"
@@ -29,6 +30,7 @@ const dialogVisible = computed({
 })
 
 const jewelryHrids = PHILOSOPHER_JEWELRY
+const enhancingTool = computed(() => playerStore.config.actionConfigMap.get("enhancing")?.tool)
 
 const rows = computed(() => allRows.value
   .filter((row) => {
@@ -41,10 +43,13 @@ const rows = computed(() => allRows.value
 
 async function calculate() {
   const version = ++calculationVersion
+  const playerConfig = playerStore.config
   loading.value = true
   allRows.value = []
   completedItems.value = 0
-  prices.value = calculateExpectedJewelryMaterialPrices()
+  // 强化期望次数缓存不区分人物加成，切换全局装备后必须重新求解。
+  clearEnhancelateCache()
+  prices.value = runWithPlayerContext(playerConfig, calculateExpectedJewelryMaterialPrices)
   if (!prices.value) {
     loading.value = false
     return
@@ -54,7 +59,7 @@ async function calculate() {
   try {
     for (const hrid of jewelryHrids) {
       if (version !== calculationVersion) break
-      const result = calculatePhilosopherJewelryWages(hrid, prices.value)
+      const result = runWithPlayerContext(playerConfig, () => calculatePhilosopherJewelryWages(hrid, prices.value!))
       if (version !== calculationVersion) break
       allRows.value.push(...result)
       completedItems.value++
@@ -82,6 +87,10 @@ watch([
 
 <template>
   <el-dialog v-model="dialogVisible" :title="t('首饰工时')" width="min(1200px, 95vw)" destroy-on-close>
+    <div class="flex flex-wrap gap-3 mb-3">
+      <span>{{ t('当前预设') }}：{{ playerStore.config.name || playerStore.presetIndex + 1 }}</span>
+      <span>{{ t('强化器') }}：{{ enhancingTool?.hrid ? `${t(getItemDetailOf(enhancingTool.hrid)?.name ?? enhancingTool.hrid)} +${enhancingTool.enhanceLevel || 0}` : t('未装备') }}</span>
+    </div>
     <template v-if="prices">
       <el-alert :title="t('贤者碎按自制期望成本计价；一次贤者石转化的成本按星碎、太阳石、保护镜的期望市值分摊。全部低级首饰自行制作。工时包含两层首饰制作与强化，不含贤者石加工时间。')" type="info" :closable="false" class="mb-3" />
       <div class="flex flex-wrap gap-3 mb-4">
