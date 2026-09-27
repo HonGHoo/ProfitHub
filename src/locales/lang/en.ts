@@ -712,6 +712,9 @@ export default {
   "贤者碎期望单价": "Expected crushed stone price",
   "星碎期望单价": "Expected star fragment price",
   "保护镜期望单价": "Expected protection mirror price",
+  "星碎分摊单价": "Allocated star fragment cost",
+  "太阳石分摊单价": "Allocated sunstone cost",
+  "保护镜分摊单价": "Allocated protection mirror cost",
   "搜索首饰": "Search jewelry",
   "全部首饰": "All jewelry",
   "全部贤者首饰": "All Philosopher's jewelry",
@@ -727,6 +730,11 @@ export default {
   "自制单价": "Crafted unit cost",
   "制作耗时": "Crafting time",
   "贤者首饰制作成本": "Philosopher jewelry craft cost",
+  "强化期望消耗": "Expected enhancement costs",
+  "成品期望总成本": "Expected total cost per item",
+  "成品税后期望收入": "Expected after-tax income per item",
+  "成品期望盈亏": "Expected profit per item",
+  "贤者碎按自制期望成本计价；一次贤者石转化的成本按星碎、太阳石、保护镜的期望市值分摊。全部低级首饰自行制作。工时包含两层首饰制作与强化，不含贤者石加工时间。": "Price crushed stones at expected crafting cost. Allocate each stone transmutation cost across star fragments, sunstones, and protection mirrors by expected market value. Craft all lower-tier jewelry. Wage includes both jewelry crafting stages and enhancement, but excludes stone processing time.",
   "全部制作时间": "Total crafting time",
   "强化期望次数": "Expected enhancement attempts"
 }

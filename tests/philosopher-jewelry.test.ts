@@ -45,7 +45,11 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
   expect(prices!.crushedYield).toBeGreaterThan(1)
   expect(prices!.starYield).toBeGreaterThan(1)
   expect(prices!.mirrorYield).toBeGreaterThan(1)
+  expect(prices!.sunstoneYield).toBeGreaterThan(1)
   expect([prices!.crushedStone, prices!.starFragment, prices!.protectionMirror].every(Number.isFinite)).toBe(true)
+  expect(prices!.starFragment * prices!.starYield
+    + prices!.sunstone * prices!.sunstoneYield
+    + prices!.protectionMirror * prices!.mirrorYield).toBeCloseTo(prices!.transmuteCost, 2)
 
   expect(prices!.starFragment).not.toBe(getPriceOf(STAR_FRAGMENT).ask)
   for (const hrid of PHILOSOPHER_JEWELRY) {
@@ -56,6 +60,7 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
     expect(rows.length).toBeGreaterThan(0)
     expect(rows.every(row => row.hrid === hrid)).toBe(true)
     expect(rows.every(row => Number.isFinite(row.profitPH))).toBe(true)
+    expect(rows.every(row => Math.abs(row.incomePerItem - row.costPerItem - row.profitPH * (row.craftHours + row.enhanceHours)) < 1)).toBe(true)
     expect(rows.every(row => row.lowJewelry.map(item => item.hrid).sort().join() === [...required].sort().join())).toBe(true)
     expect(rows.every(row => row.lowJewelry.every(item => item.requiredCount > 0 && item.hours > 0))).toBe(true)
     expect(rows[0].lowJewelry.some(item => item.unitCost !== getPriceOf(item.hrid).ask)).toBe(true)

@@ -83,12 +83,13 @@ watch([
 <template>
   <el-dialog v-model="dialogVisible" :title="t('首饰工时')" width="min(1200px, 95vw)" destroy-on-close>
     <template v-if="prices">
-      <el-alert :title="t('以贤者石右收价计算贤者碎、星碎、保护镜的期望成本；配方所需的全部低级首饰均自行制作，再制作贤者首饰并强化。工时包含两层首饰制作与强化，不含贤者石加工时间。')" type="info" :closable="false" class="mb-3" />
+      <el-alert :title="t('贤者碎按自制期望成本计价；一次贤者石转化的成本按星碎、太阳石、保护镜的期望市值分摊。全部低级首饰自行制作。工时包含两层首饰制作与强化，不含贤者石加工时间。')" type="info" :closable="false" class="mb-3" />
       <div class="flex flex-wrap gap-3 mb-4">
         <div>{{ t('贤者之石右收价') }}：{{ Format.money(prices.stoneBid) }}</div>
         <div>{{ t('贤者碎期望单价') }}：{{ Format.money(prices.crushedStone) }} <small>(÷ {{ Format.number(prices.crushedYield, 2) }})</small></div>
-        <div>{{ t('星碎期望单价') }}：{{ Format.money(prices.starFragment) }} <small>(÷ {{ Format.number(prices.starYield, 2) }})</small></div>
-        <div>{{ t('保护镜期望单价') }}：{{ Format.money(prices.protectionMirror) }} <small>(÷ {{ Format.number(prices.mirrorYield, 2) }})</small></div>
+        <div>{{ t('星碎分摊单价') }}：{{ Format.money(prices.starFragment) }}</div>
+        <div>{{ t('太阳石分摊单价') }}：{{ Format.money(prices.sunstone) }}</div>
+        <div>{{ t('保护镜分摊单价') }}：{{ Format.money(prices.protectionMirror) }}</div>
       </div>
     </template>
     <el-alert v-else :title="t('贤者之石缺少右收价或制作、转化原料缺价')" type="warning" :closable="false" class="mb-3" />
@@ -148,6 +149,10 @@ watch([
             </el-table>
             <div class="flex flex-wrap gap-4">
               <span>{{ t('贤者首饰制作成本') }}：{{ Format.money(row.craftedCost) }}</span>
+              <span>{{ t('强化期望消耗') }}：{{ Format.money(row.costPerItem - row.craftedCost) }}</span>
+              <span>{{ t('成品期望总成本') }}：{{ Format.money(row.costPerItem) }}</span>
+              <span>{{ t('成品税后期望收入') }}：{{ Format.money(row.incomePerItem) }}</span>
+              <span>{{ t('成品期望盈亏') }}：<span :class="row.incomePerItem >= row.costPerItem ? 'color-green-500' : 'color-red-500'">{{ Format.money(row.incomePerItem - row.costPerItem) }}</span></span>
               <span>{{ t('全部制作时间') }}：{{ Format.costTime(row.craftHours * 3600 * 1e9) }}</span>
               <span>{{ t('强化期望次数') }}：{{ Format.number(row.actions, 4) }}</span>
             </div>

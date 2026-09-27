@@ -7,6 +7,7 @@ import { ManufactureCalculator } from "./manufacture"
 export const PHILOSOPHER_STONE = "/items/philosophers_stone"
 export const CRUSHED_STONE = "/items/crushed_philosophers_stone"
 export const STAR_FRAGMENT = "/items/star_fragment"
+export const SUNSTONE = "/items/sunstone"
 export const PROTECTION_MIRROR = "/items/mirror_of_protection"
 export const PHILOSOPHER_JEWELRY = [
   "/items/philosophers_ring",
@@ -18,9 +19,12 @@ export interface ExpectedJewelryMaterialPrices {
   stoneBid: number
   crushedStone: number
   starFragment: number
+  sunstone: number
   protectionMirror: number
+  transmuteCost: number
   crushedYield: number
   starYield: number
+  sunstoneYield: number
   mirrorYield: number
 }
 
@@ -41,6 +45,8 @@ export interface PhilosopherJewelryWageRow {
   profitPH: number
   costPH: number
   incomePH: number
+  costPerItem: number
+  incomePerItem: number
   craftedCost: number
   craftHours: number
   enhanceHours: number
@@ -145,6 +151,8 @@ export function calculatePhilosopherJewelryWages(
         profitPH: enhance.result.profitPH * enhanceHours / totalHours,
         costPH: enhance.result.costPH * enhanceHours / totalHours,
         incomePH: enhance.result.incomePH * enhanceHours / totalHours,
+        costPerItem: enhance.result.costPH * enhanceHours,
+        incomePerItem: enhance.result.incomePH * enhanceHours,
         craftedCost,
         craftHours,
         enhanceHours,
@@ -157,7 +165,7 @@ export function calculatePhilosopherJewelryWages(
   return rows
 }
 
-/** 每种产物单独按完整投入 ÷ 期望产量估价，与市场单价替换口径一致。 */
+/** 按转化的联合产出市值分摊一次投入，避免星碎与保护镜重复承担整颗贤者石成本。 */
 export function calculateExpectedJewelryMaterialPrices(): ExpectedJewelryMaterialPrices | null {
   // 右收价作为买入成本，不随全局买价档位改变。
   const stoneBid = getPriceOf(PHILOSOPHER_STONE, 0, PriceStatus.BID).ask
@@ -172,26 +180,39 @@ export function calculateExpectedJewelryMaterialPrices(): ExpectedJewelryMateria
   })
   const transmute = new TransmuteCalculator({
     hrid: PHILOSOPHER_STONE,
-    ingredientPriceOverrides
+    ingredientPriceOverrides,
+    includeRare: false
   })
   if (!craft.available || !transmute.available || !craft.valid || !transmute.valid) return null
 
   const crushedYield = expectedOutputPerAction(craft, CRUSHED_STONE)
-  const starYield = transmute.productList
-    .filter(item => item.hrid === STAR_FRAGMENT)
+  const yieldOf = (hrid: string) => transmute.productList
+    .filter(item => item.hrid === hrid)
     .reduce((sum, item) => sum + item.count * (item.rate ?? 1) * transmute.successRate, 0)
-  const mirrorYield = transmute.productList
-    .filter(item => item.hrid === PROTECTION_MIRROR)
-    .reduce((sum, item) => sum + item.count * (item.rate ?? 1) * transmute.successRate, 0)
-  if (crushedYield <= 0 || starYield <= 0 || mirrorYield <= 0) return null
+  const starYield = yieldOf(STAR_FRAGMENT)
+  const sunstoneYield = yieldOf(SUNSTONE)
+  const mirrorYield = yieldOf(PROTECTION_MIRROR)
+  if (crushedYield <= 0 || starYield <= 0 || sunstoneYield <= 0 || mirrorYield <= 0) return null
+
+  const bidOf = (hrid: string) => transmute.productListWithPrice.find(item => item.hrid === hrid)?.price ?? -1
+  const starBid = bidOf(STAR_FRAGMENT)
+  const sunstoneBid = bidOf(SUNSTONE)
+  const mirrorBid = bidOf(PROTECTION_MIRROR)
+  if (starBid <= 0 || sunstoneBid <= 0 || mirrorBid <= 0) return null
+  const expectedMarketValue = starYield * starBid + sunstoneYield * sunstoneBid + mirrorYield * mirrorBid
+  if (!Number.isFinite(expectedMarketValue) || expectedMarketValue <= 0) return null
+  const allocationFactor = transmute.cost / expectedMarketValue
 
   return {
     stoneBid,
     crushedStone: craft.cost / crushedYield,
-    starFragment: transmute.cost / starYield,
-    protectionMirror: transmute.cost / mirrorYield,
+    starFragment: starBid * allocationFactor,
+    sunstone: sunstoneBid * allocationFactor,
+    protectionMirror: mirrorBid * allocationFactor,
+    transmuteCost: transmute.cost,
     crushedYield,
     starYield,
+    sunstoneYield,
     mirrorYield
   }
 }
