@@ -1,10 +1,8 @@
 <script lang="ts" setup>
-import type Calculator from "@/calculator"
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import * as Format from "@@/utils/format"
-import { calculateExpectedJewelryMaterialPrices, CRUSHED_STONE, type ExpectedJewelryMaterialPrices, PHILOSOPHER_STONE, PROTECTION_MIRROR, STAR_FRAGMENT } from "@/calculator/philosopherJewelry"
-import { getGameDataApi } from "@/common/apis/game"
-import { calcEnhanceProfit } from "@/common/apis/jungle"
+import { calculateExpectedJewelryMaterialPrices, calculatePhilosopherJewelryWages, type ExpectedJewelryMaterialPrices, PHILOSOPHER_JEWELRY, type PhilosopherJewelryWageRow } from "@/calculator/philosopherJewelry"
+import { getItemDetailOf } from "@/common/apis/game"
 import { getEquipmentTypeOf } from "@/common/utils/game"
 import { useGameStore } from "@/pinia/stores/game"
 import { usePlayerStore } from "@/pinia/stores/player"
@@ -17,7 +15,7 @@ const playerStore = usePlayerStore()
 
 const loading = ref(false)
 const prices = ref<ExpectedJewelryMaterialPrices | null>(null)
-const allRows = ref<Calculator[]>([])
+const allRows = ref<PhilosopherJewelryWageRow[]>([])
 const completedItems = ref(0)
 const search = ref("")
 const minLevel = ref(1)
@@ -30,19 +28,16 @@ const dialogVisible = computed({
   set: (value: boolean) => emit("update:modelValue", value)
 })
 
-const jewelryHrids = computed(() => Object.values(getGameDataApi().itemDetailMap)
-  .filter(item => item.enhancementCosts && ["ring", "earrings", "neck"].includes(getEquipmentTypeOf(item)))
-  .map(item => item.hrid))
+const jewelryHrids = PHILOSOPHER_JEWELRY
 
 const rows = computed(() => allRows.value
   .filter((row) => {
-    const level = row.calculator.enhanceLevel
-    const type = getEquipmentTypeOf(row.calculator.item)
-    return level >= minLevel.value && level <= maxLevel.value
+    const type = getEquipmentTypeOf(getItemDetailOf(row.hrid))
+    return row.enhanceLevel >= minLevel.value && row.enhanceLevel <= maxLevel.value
       && (jewelryType.value === "all" || type === jewelryType.value)
-      && t(row.calculator.item.name).toLocaleLowerCase().includes(search.value.toLocaleLowerCase())
+      && t(getItemDetailOf(row.hrid).name).toLocaleLowerCase().includes(search.value.toLocaleLowerCase())
   })
-  .sort((a, b) => b.result.profitPH - a.result.profitPH))
+  .sort((a, b) => b.profitPH - a.profitPH))
 
 async function calculate() {
   const version = ++calculationVersion
@@ -57,18 +52,9 @@ async function calculate() {
   await new Promise(resolve => setTimeout(resolve, 0))
   if (version !== calculationVersion) return
   try {
-    const overrides = {
-      [PHILOSOPHER_STONE]: prices.value.stoneBid,
-      [CRUSHED_STONE]: prices.value.crushedStone,
-      [STAR_FRAGMENT]: prices.value.starFragment,
-      [PROTECTION_MIRROR]: prices.value.protectionMirror
-    }
-    for (const hrid of jewelryHrids.value) {
+    for (const hrid of jewelryHrids) {
       if (version !== calculationVersion) break
-      const result = await calcEnhanceProfit({
-        itemHrids: [hrid],
-        ingredientPriceOverrides: overrides
-      })
+      const result = calculatePhilosopherJewelryWages(hrid, prices.value)
       if (version !== calculationVersion) break
       allRows.value.push(...result)
       completedItems.value++
@@ -97,7 +83,7 @@ watch([
 <template>
   <el-dialog v-model="dialogVisible" :title="t('首饰工时')" width="min(1200px, 95vw)" destroy-on-close>
     <template v-if="prices">
-      <el-alert :title="t('以贤者之石右收价为起点：制作贤者碎、转化星碎和保护镜，分别用完整投入除以该产物期望数量定价。下表沿用打野页的制作与强化收益算法；首饰制作时间计入工时，贤者石的制作与转化时间不计入。')" type="info" :closable="false" class="mb-3" />
+      <el-alert :title="t('以贤者石右收价计算贤者碎、星碎、保护镜的期望成本；配方所需的全部低级首饰均自行制作，再制作贤者首饰并强化。工时包含两层首饰制作与强化，不含贤者石加工时间。')" type="info" :closable="false" class="mb-3" />
       <div class="flex flex-wrap gap-3 mb-4">
         <div>{{ t('贤者之石右收价') }}：{{ Format.money(prices.stoneBid) }}</div>
         <div>{{ t('贤者碎期望单价') }}：{{ Format.money(prices.crushedStone) }} <small>(÷ {{ Format.number(prices.crushedYield, 2) }})</small></div>
@@ -110,7 +96,7 @@ watch([
     <div class="flex flex-wrap items-center gap-2 mb-3">
       <el-input v-model="search" :placeholder="t('搜索首饰')" clearable style="width: 180px" />
       <el-select v-model="jewelryType" style="width: 120px">
-        <el-option :label="t('全部首饰')" value="all" />
+        <el-option :label="t('全部贤者首饰')" value="all" />
         <el-option :label="t('戒指')" value="ring" />
         <el-option :label="t('耳环')" value="earrings" />
         <el-option :label="t('项链')" value="neck" />
@@ -126,42 +112,79 @@ watch([
     </div>
 
     <el-table :data="rows" height="min(60vh, 600px)" border>
+      <el-table-column type="expand" width="48">
+        <template #default="{ row }">
+          <div class="p-3">
+            <strong>{{ t('低级首饰自制明细') }}</strong>
+            <el-table :data="row.lowJewelry" size="small" class="mt-2 mb-2">
+              <el-table-column :label="t('物品')" min-width="180">
+                <template #default="{ row: low }">
+                  <div class="flex items-center gap-2">
+                    <ItemIcon :hrid="low.hrid" />
+                    <span>{{ t(getItemDetailOf(low.hrid).name) }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('期望用量')" min-width="110" align="right">
+                <template #default="{ row: low }">
+                  {{ Format.number(low.requiredCount, 4) }}
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('自制单价')" min-width="125" align="right">
+                <template #default="{ row: low }">
+                  {{ Format.money(low.unitCost) }}
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('成本')" min-width="125" align="right">
+                <template #default="{ row: low }">
+                  {{ Format.money(low.totalCost) }}
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('制作耗时')" min-width="125" align="right">
+                <template #default="{ row: low }">
+                  {{ Format.costTime(low.hours * 3600 * 1e9) }}
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="flex flex-wrap gap-4">
+              <span>{{ t('贤者首饰制作成本') }}：{{ Format.money(row.craftedCost) }}</span>
+              <span>{{ t('全部制作时间') }}：{{ Format.costTime(row.craftHours * 3600 * 1e9) }}</span>
+              <span>{{ t('强化期望次数') }}：{{ Format.number(row.actions, 4) }}</span>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column :label="t('首饰')" min-width="180">
         <template #default="{ row }">
           <div class="flex items-center gap-2">
-            <ItemIcon :hrid="row.calculator.hrid" />
-            <span>{{ t(row.calculator.item.name) }}</span>
+            <ItemIcon :hrid="row.hrid" />
+            <span>{{ t(getItemDetailOf(row.hrid).name) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column :label="t('等级')" width="75" align="right">
         <template #default="{ row }">
-          +{{ row.calculator.enhanceLevel }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('方案')" min-width="170">
-        <template #default="{ row }">
-          {{ row.project }}
+          +{{ row.enhanceLevel }}
         </template>
       </el-table-column>
       <el-table-column :label="t('保护')" width="90" align="right">
         <template #default="{ row }">
-          +{{ row.calculator.protectLevel }}
+          +{{ row.protectLevel }}
         </template>
       </el-table-column>
       <el-table-column :label="t('工时费/h')" min-width="135" align="right">
         <template #default="{ row }">
-          <span :class="row.result.profitPH >= 0 ? 'color-green-500' : 'color-red-500'">{{ Format.money(row.result.profitPH) }}</span>
+          <span :class="row.profitPH >= 0 ? 'color-green-500' : 'color-red-500'">{{ Format.money(row.profitPH) }}</span>
         </template>
       </el-table-column>
       <el-table-column :label="t('成本/h')" min-width="125" align="right">
         <template #default="{ row }">
-          {{ Format.money(row.result.costPH) }}
+          {{ Format.money(row.costPH) }}
         </template>
       </el-table-column>
       <el-table-column :label="t('收入/h')" min-width="125" align="right">
         <template #default="{ row }">
-          {{ Format.money(row.result.incomePH) }}
+          {{ Format.money(row.incomePH) }}
         </template>
       </el-table-column>
       <template #empty>

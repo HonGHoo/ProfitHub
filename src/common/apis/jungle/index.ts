@@ -63,9 +63,6 @@ export async function getDataApi(params: any, cacheKey?: string) {
 export interface ManufactureEnhanceOptions {
   sellTaxFactor?: number
   includeRare?: boolean
-  /** 只计算指定装备；弹窗可复用打野算法而不扫描全市场。 */
-  itemHrids?: string[]
-  ingredientPriceOverrides?: Record<string, number>
 }
 
 export async function calcEnhanceProfit(options: ManufactureEnhanceOptions = {}) {
@@ -73,9 +70,7 @@ export async function calcEnhanceProfit(options: ManufactureEnhanceOptions = {})
   const includeRare = options.includeRare !== false
   const gameData = getGameDataApi()
   // 所有物品列表
-  const itemHridSet = options.itemHrids ? new Set(options.itemHrids) : null
-  const validItems = Object.values(gameData.itemDetailMap)
-    .filter(item => item.enhancementCosts && (!itemHridSet || itemHridSet.has(item.hrid)))
+  const validItems = Object.values(gameData.itemDetailMap).filter(item => item.enhancementCosts)
   const profitList: WorkflowCalculator[] = []
 
   for (const item of validItems) {
@@ -100,12 +95,7 @@ export async function calcEnhanceProfit(options: ManufactureEnhanceOptions = {})
       }
 
       for (let protectLevel = (enhanceLevel > 2 ? 2 : enhanceLevel); protectLevel <= enhanceLevel; protectLevel++) {
-        const enhancer = new EnhanceCalculator({
-          enhanceLevel,
-          protectLevel,
-          hrid: item.hrid,
-          ingredientPriceOverrides: options.ingredientPriceOverrides
-        })
+        const enhancer = new EnhanceCalculator({ enhanceLevel, protectLevel, hrid: item.hrid })
         const projects: [string, Action][] = [
           [getTrans("锻造"), "cheesesmithing"],
           [getTrans("制造"), "crafting"],
@@ -113,13 +103,7 @@ export async function calcEnhanceProfit(options: ManufactureEnhanceOptions = {})
         ]
         for (const [projectLast, actionLast] of projects) {
           for (const [project, action] of projects) {
-            const manual = new ManufactureCalculator({
-              hrid: item.hrid,
-              project,
-              action,
-              includeRare,
-              ingredientPriceOverrides: options.ingredientPriceOverrides
-            })
+            const manual = new ManufactureCalculator({ hrid: item.hrid, project, action, includeRare })
 
             if (!enhancer.available) {
               continue
@@ -156,8 +140,7 @@ export async function calcEnhanceProfit(options: ManufactureEnhanceOptions = {})
                 hrid: currentManual.actionItem.upgradeItemHrid,
                 project: projectLast,
                 action: actionLast,
-                includeRare,
-                ingredientPriceOverrides: options.ingredientPriceOverrides
+                includeRare
               })
 
               if (!nextManual.available) {

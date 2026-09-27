@@ -714,11 +714,19 @@ export default {
   "保护镜期望单价": "Expected protection mirror price",
   "搜索首饰": "Search jewelry",
   "全部首饰": "All jewelry",
+  "全部贤者首饰": "All Philosopher's jewelry",
   "强化等级": "Enhancement level",
   "重新计算": "Recalculate",
   "成本/h": "Cost/h",
   "收入/h": "Income/h",
   "当前筛选下没有可计算的首饰方案": "No calculable jewelry plans match these filters",
   "贤者之石缺少右收价或制作、转化原料缺价": "Missing stone bid or crafting/transmutation input prices",
-  "以贤者之石右收价为起点：制作贤者碎、转化星碎和保护镜，分别用完整投入除以该产物期望数量定价。下表沿用打野页的制作与强化收益算法；首饰制作时间计入工时，贤者石的制作与转化时间不计入。": "Starting from the stone bid: craft crushed stones and transmute star fragments and protection mirrors. Each expected unit price divides the full input cost by that output's expected quantity. The table uses Jungle's crafting and enhancement profit calculation. Jewelry crafting time is included; stone crafting and transmutation time is excluded."
+  "以贤者石右收价计算贤者碎、星碎、保护镜的期望成本；配方所需的全部低级首饰均自行制作，再制作贤者首饰并强化。工时包含两层首饰制作与强化，不含贤者石加工时间。": "Use the stone bid to price expected crushed stones, star fragments, and protection mirrors. Craft every lower-tier jewelry ingredient, then craft and enhance Philosopher's jewelry. Wage includes both jewelry crafting stages and enhancement, but excludes stone processing time.",
+  "低级首饰自制明细": "Crafted lower-tier jewelry",
+  "期望用量": "Expected quantity",
+  "自制单价": "Crafted unit cost",
+  "制作耗时": "Crafting time",
+  "贤者首饰制作成本": "Philosopher jewelry craft cost",
+  "全部制作时间": "Total crafting time",
+  "强化期望次数": "Expected enhancement attempts"
 }

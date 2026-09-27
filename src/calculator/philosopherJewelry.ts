@@ -1,12 +1,18 @@
-import { getPriceOf } from "@/common/apis/game"
+import { getActionDetailOf, getPriceOf } from "@/common/apis/game"
 import { PriceStatus } from "@/pinia/stores/game"
 import { TransmuteCalculator } from "./alchemy"
+import { EnhanceCalculator } from "./enhance"
 import { ManufactureCalculator } from "./manufacture"
 
 export const PHILOSOPHER_STONE = "/items/philosophers_stone"
 export const CRUSHED_STONE = "/items/crushed_philosophers_stone"
 export const STAR_FRAGMENT = "/items/star_fragment"
 export const PROTECTION_MIRROR = "/items/mirror_of_protection"
+export const PHILOSOPHER_JEWELRY = [
+  "/items/philosophers_ring",
+  "/items/philosophers_earrings",
+  "/items/philosophers_necklace"
+] as const
 
 export interface ExpectedJewelryMaterialPrices {
   stoneBid: number
@@ -16,6 +22,139 @@ export interface ExpectedJewelryMaterialPrices {
   crushedYield: number
   starYield: number
   mirrorYield: number
+}
+
+export interface CraftedLowJewelry {
+  hrid: string
+  /** 制作一件贤者首饰的实际期望消耗，含工匠节省。 */
+  requiredCount: number
+  unitCost: number
+  totalCost: number
+  hours: number
+}
+
+export interface PhilosopherJewelryWageRow {
+  hrid: string
+  enhanceLevel: number
+  protectLevel: number
+  actions: number
+  profitPH: number
+  costPH: number
+  incomePH: number
+  craftedCost: number
+  craftHours: number
+  enhanceHours: number
+  lowJewelry: CraftedLowJewelry[]
+}
+
+function expectedOutputPerAction(calc: ManufactureCalculator, hrid: string): number {
+  return calc.productList
+    .filter(item => item.hrid === hrid)
+    .reduce((sum, item) => sum + item.count * (item.rate ?? 1) * calc.successRate, 0)
+}
+
+/**
+ * 低级首饰全部按当前制作配方自制，星碎按贤者石转化期望价计入；
+ * 再制作贤者首饰并从 +0 强化。强化收益沿用打野页的 EnhanceCalculator，
+ * 在其工时上补齐所有低级首饰及贤者首饰的制作时间。
+ */
+export function calculatePhilosopherJewelryWages(
+  hrid: string,
+  prices: ExpectedJewelryMaterialPrices
+): PhilosopherJewelryWageRow[] {
+  if (!PHILOSOPHER_JEWELRY.includes(hrid as typeof PHILOSOPHER_JEWELRY[number])) return []
+  const action = getActionDetailOf(`/actions/crafting/${hrid.split("/").pop()}`)
+  if (!action) return []
+  const materialOverrides: Record<string, number> = {
+    [PHILOSOPHER_STONE]: prices.stoneBid,
+    [CRUSHED_STONE]: prices.crushedStone,
+    [STAR_FRAGMENT]: prices.starFragment,
+    [PROTECTION_MIRROR]: prices.protectionMirror
+  }
+  const lowUnitHours = new Map<string, number>()
+  for (const input of action.inputItems) {
+    const lowHrid = input.itemHrid
+    const low = new ManufactureCalculator({
+      hrid: lowHrid,
+      project: "制作低级首饰",
+      action: "crafting",
+      includeRare: false,
+      ingredientPriceOverrides: materialOverrides
+    })
+    if (!low.available || !low.valid) return []
+    const output = expectedOutputPerAction(low, lowHrid)
+    if (output <= 0) return []
+    materialOverrides[lowHrid] = low.cost / output
+    lowUnitHours.set(lowHrid, 1 / (low.actionsPH * output))
+  }
+
+  const craft = new ManufactureCalculator({
+    hrid,
+    project: "制作贤者首饰",
+    action: "crafting",
+    includeRare: false,
+    ingredientPriceOverrides: materialOverrides
+  })
+  if (!craft.available || !craft.valid) return []
+  const output = expectedOutputPerAction(craft, hrid)
+  if (output <= 0) return []
+  const lowJewelry = craft.ingredientListWithPrice
+    .filter(item => lowUnitHours.has(item.hrid))
+    .map((item) => {
+      const requiredCount = item.count / output
+      return {
+        hrid: item.hrid,
+        requiredCount,
+        unitCost: item.price,
+        totalCost: item.price * requiredCount,
+        hours: requiredCount * lowUnitHours.get(item.hrid)!
+      }
+    })
+  // 每一件贤者首饰都需要制作全部低级首饰；总制作时间含两层制作。
+  const craftHours = 1 / (craft.actionsPH * output)
+    + lowJewelry.reduce((sum, item) => sum + item.hours, 0)
+  const craftedCost = craft.cost / output
+  const enhanceOverrides = { ...materialOverrides, [hrid]: craftedCost }
+  const rows: PhilosopherJewelryWageRow[] = []
+
+  for (let enhanceLevel = 1; enhanceLevel <= 20; enhanceLevel++) {
+    let best: PhilosopherJewelryWageRow | null = null
+    for (let protectLevel = enhanceLevel > 2 ? 2 : enhanceLevel; protectLevel <= enhanceLevel; protectLevel++) {
+      const enhance = new EnhanceCalculator({
+        hrid,
+        enhanceLevel,
+        protectLevel,
+        ingredientPriceOverrides: enhanceOverrides
+      })
+      if (!enhance.available || !enhance.valid || enhance.productListWithPrice[0].price < 0) continue
+      enhance.run()
+      if (!Number.isFinite(enhance.result.profitPH)
+        || !Number.isFinite(enhance.result.costPH)
+        || !Number.isFinite(enhance.result.incomePH)) {
+        continue
+      }
+      const { actions } = enhance.enhancelate()
+      const enhanceHours = actions / enhance.actionsPH
+      const totalHours = craftHours + enhanceHours
+      if (!Number.isFinite(totalHours) || totalHours <= 0) continue
+      const row: PhilosopherJewelryWageRow = {
+        hrid,
+        enhanceLevel,
+        protectLevel,
+        actions,
+        profitPH: enhance.result.profitPH * enhanceHours / totalHours,
+        costPH: enhance.result.costPH * enhanceHours / totalHours,
+        incomePH: enhance.result.incomePH * enhanceHours / totalHours,
+        craftedCost,
+        craftHours,
+        enhanceHours,
+        lowJewelry
+      }
+      if (!best || row.profitPH > best.profitPH) best = row
+    }
+    if (best) rows.push(best)
+  }
+  return rows
 }
 
 /** 每种产物单独按完整投入 ÷ 期望产量估价，与市场单价替换口径一致。 */
@@ -37,9 +176,7 @@ export function calculateExpectedJewelryMaterialPrices(): ExpectedJewelryMateria
   })
   if (!craft.available || !transmute.available || !craft.valid || !transmute.valid) return null
 
-  const crushedYield = craft.productList
-    .filter(item => item.hrid === CRUSHED_STONE)
-    .reduce((sum, item) => sum + item.count * (item.rate ?? 1) * craft.successRate, 0)
+  const crushedYield = expectedOutputPerAction(craft, CRUSHED_STONE)
   const starYield = transmute.productList
     .filter(item => item.hrid === STAR_FRAGMENT)
     .reduce((sum, item) => sum + item.count * (item.rate ?? 1) * transmute.successRate, 0)
