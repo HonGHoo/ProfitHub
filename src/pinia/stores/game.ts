@@ -475,7 +475,8 @@ export async function updateMarketData(oldData: MarketData | null, newData: Mark
     }
     for (const level in newMarket[hrid]) {
       const price = newMarket[hrid][level]
-      if (price.ask === -1) {
+      // 贤者首饰必须使用本次市场快照的卖单价，不能沿用上次快照的卖价。
+      if (price.ask === -1 && hrid !== "/items/philosophers_stone") {
         price.ask = (oldMarket[hrid]?.[level] as MarketItemPrice)?.ask || -1
       }
       if (price.bid === -1) {

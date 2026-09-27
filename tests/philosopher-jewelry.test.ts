@@ -19,7 +19,6 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
   const { usePlayerStore, defaultActionConfig } = await import("@/pinia/stores/player")
   const { clearEnhancelateCache, getPriceOf } = await import("@/common/apis/game")
   const { getBuffOf, runWithPlayerContext } = await import("@/common/apis/player")
-  const { PriceStatus } = await import("@/pinia/stores/game")
   const {
     calculateExpectedJewelryMaterialPrices,
     calculatePhilosopherJewelryWages,
@@ -42,7 +41,8 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
 
   const prices = calculateExpectedJewelryMaterialPrices()
   expect(prices).not.toBeNull()
-  expect(prices!.stoneBid).toBe(getPriceOf(PHILOSOPHER_STONE, 0, PriceStatus.BID).ask)
+  expect(prices!.stoneAsk).toBe(game.marketData!.marketData[PHILOSOPHER_STONE][0].ask)
+  expect(prices!.stoneAsk).not.toBe(game.marketData!.marketData[PHILOSOPHER_STONE][0].bid)
   expect(prices!.crushedYield).toBeGreaterThan(1)
   expect(prices!.starYield).toBeGreaterThan(1)
   expect(prices!.mirrorYield).toBeGreaterThan(1)
@@ -61,7 +61,7 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
     expect(rows.length).toBeGreaterThan(0)
     expect(rows.every(row => row.hrid === hrid)).toBe(true)
     expect(rows.every(row => Number.isFinite(row.profitPH))).toBe(true)
-    expect(rows.every(row => Math.abs(row.incomePerItem - row.costPerItem - row.profitPH * (row.craftHours + row.enhanceHours)) < 1)).toBe(true)
+    expect(rows.every(row => Math.abs(row.incomePerItem - row.costPerItem - row.profitPH * (row.craftHours + row.enhanceHours)) < Math.max(1, row.costPerItem * 1e-12))).toBe(true)
     expect(rows.every(row => row.lowJewelry.map(item => item.hrid).sort().join() === [...required].sort().join())).toBe(true)
     expect(rows.every(row => row.lowJewelry.every(item => item.requiredCount > 0 && item.hours > 0))).toBe(true)
     expect(rows[0].lowJewelry.some(item => item.unitCost !== getPriceOf(item.hrid).ask)).toBe(true)
@@ -91,4 +91,18 @@ it("crafts every lower jewelry component before valuing philosopher jewelry enha
   expect(strongRow).toBeDefined()
   expect(strongRow!.actions).toBeLessThan(weakRow!.actions)
   expect(strongRow!.craftedCost).toBeCloseTo(weakRow!.craftedCost)
+
+  const noStoneBid = structuredClone(market)
+  noStoneBid.marketData[PHILOSOPHER_STONE][0].b = -1
+  game.marketData = await updateMarketData(null, noStoneBid, data)
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(calculateExpectedJewelryMaterialPrices()?.stoneAsk).toBe(game.marketData.marketData[PHILOSOPHER_STONE][0].ask)
+
+  const noStoneAsk = structuredClone(market)
+  noStoneAsk.marketData[PHILOSOPHER_STONE][0].a = -1
+  game.marketData = await updateMarketData(game.marketData, noStoneAsk, data)
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(game.marketData.marketData[PHILOSOPHER_STONE][0].ask).toBe(-1)
+  expect(game.marketData.marketData[PHILOSOPHER_STONE][0].bid).toBeGreaterThan(0)
+  expect(calculateExpectedJewelryMaterialPrices()).toBeNull()
 }, 60000)

@@ -1,5 +1,4 @@
-import { getActionDetailOf, getPriceOf } from "@/common/apis/game"
-import { PriceStatus } from "@/pinia/stores/game"
+import { getActionDetailOf, getMarketDataApi } from "@/common/apis/game"
 import { TransmuteCalculator } from "./alchemy"
 import { EnhanceCalculator } from "./enhance"
 import { ManufactureCalculator } from "./manufacture"
@@ -16,7 +15,7 @@ export const PHILOSOPHER_JEWELRY = [
 ] as const
 
 export interface ExpectedJewelryMaterialPrices {
-  stoneBid: number
+  stoneAsk: number
   crushedStone: number
   starFragment: number
   sunstone: number
@@ -72,7 +71,7 @@ export function calculatePhilosopherJewelryWages(
   const action = getActionDetailOf(`/actions/crafting/${hrid.split("/").pop()}`)
   if (!action) return []
   const materialOverrides: Record<string, number> = {
-    [PHILOSOPHER_STONE]: prices.stoneBid,
+    [PHILOSOPHER_STONE]: prices.stoneAsk,
     [CRUSHED_STONE]: prices.crushedStone,
     [STAR_FRAGMENT]: prices.starFragment,
     [PROTECTION_MIRROR]: prices.protectionMirror
@@ -167,10 +166,10 @@ export function calculatePhilosopherJewelryWages(
 
 /** 按转化的联合产出市值分摊一次投入，避免星碎与保护镜重复承担整颗贤者石成本。 */
 export function calculateExpectedJewelryMaterialPrices(): ExpectedJewelryMaterialPrices | null {
-  // 右收价作为买入成本，不随全局买价档位改变。
-  const stoneBid = getPriceOf(PHILOSOPHER_STONE, 0, PriceStatus.BID).ask
-  if (stoneBid < 0) return null
-  const ingredientPriceOverrides = { [PHILOSOPHER_STONE]: stoneBid }
+  // 直接读取市场卖方最低挂价，不受全局选价或手填价格影响。
+  const stoneAsk = getMarketDataApi()?.marketData[PHILOSOPHER_STONE]?.[0]?.ask
+  if (typeof stoneAsk !== "number" || !Number.isFinite(stoneAsk) || stoneAsk <= 0) return null
+  const ingredientPriceOverrides = { [PHILOSOPHER_STONE]: stoneAsk }
 
   const craft = new ManufactureCalculator({
     hrid: CRUSHED_STONE,
@@ -204,7 +203,7 @@ export function calculateExpectedJewelryMaterialPrices(): ExpectedJewelryMateria
   const allocationFactor = transmute.cost / expectedMarketValue
 
   return {
-    stoneBid,
+    stoneAsk,
     crushedStone: craft.cost / crushedYield,
     starFragment: starBid * allocationFactor,
     sunstone: sunstoneBid * allocationFactor,
