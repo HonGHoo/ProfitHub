@@ -67,7 +67,7 @@ const pinnedCostHrid = ref<string | null>(null)
 let costHideTimer: ReturnType<typeof setTimeout> | undefined
 
 // 价差口径（利润）：卖出一颗贤者之石的税后到手价 − 单颗净成本。
-// 计税时石头与副产物均按 95% 到手价计算。
+// 计税时石头与副产物均按市场税率折算到手价。
 const stonePrice = computed(() => {
   const custom = stonePriceOverride.value
   return typeof custom === "number" && Number.isFinite(custom) && custom >= 0 ? custom : stoneResult.value?.stoneBid ?? -1

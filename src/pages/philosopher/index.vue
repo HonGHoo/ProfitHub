@@ -11,6 +11,7 @@ import { WorkflowCalculator } from "@/calculator/workflow"
 import { getItemDetailOf, getPriceOf } from "@/common/apis/game"
 import { getEquipmentList } from "@/common/apis/player"
 import { useMemory } from "@/common/composables/useMemory"
+import { SELL_TAX_FACTOR, SELL_TAX_RATE } from "@/common/constants/market"
 import { getEquipmentTypeOf } from "@/common/utils/game"
 import { useEnhancerStore } from "@/pinia/stores/enhancer"
 import { COIN_HRID } from "@/pinia/stores/game"
@@ -112,8 +113,6 @@ const search = ref("")
 const targetLevel = useMemory("philosopher-target-level", 18)
 const useBlessedInPhilosopher = useMemory("philosopher-use-blessed-in-philosopher", false)
 const hourlyRate = useMemory("philosopher-hourly-rate", 5000000)
-const taxRate = useMemory("philosopher-tax-rate", 5)
-if (taxRate.value === 2) taxRate.value = 5
 const ignoreTax = useMemory("philosopher-ignore-tax", false)
 const currentItem = ref<CurrentItemState>({
   protection: {} as IngredientRow,
@@ -132,11 +131,10 @@ const equipmentList = computed(() => {
     .sort((a, b) => a.sortIndex - b.sortIndex)
 })
 
-const marketTaxRate = computed<number>({
-  get: () => ignoreTax.value ? 0 : 5,
-  set: (value: number) => {
-    ignoreTax.value = value === 0
-    taxRate.value = value
+const includeTax = computed<boolean>({
+  get: () => !ignoreTax.value,
+  set: (value) => {
+    ignoreTax.value = !value
   }
 })
 
@@ -391,7 +389,7 @@ function buildNormalRows(target: number) {
     const totalCostNoHourly = baseCost + matCost
     let totalCost = totalCostNoHourly + hourlyRate.value * (actions / calc.actionsPH)
     if (!ignoreTax.value) {
-      totalCost /= 1 - taxRate.value / 100
+      totalCost /= SELL_TAX_FACTOR
     }
     const seconds = actions / calc.actionsPH * 3600
     rows.push({
@@ -470,7 +468,7 @@ function getBestPhilosopherPlan(target: number): PhilosopherPlan | null {
       const seconds = flow.totalActions / actionsPH * 3600
       let totalCost = totalCostNoHourly + hourlyRate.value * (flow.totalActions / actionsPH)
       if (!ignoreTax.value) {
-        totalCost /= 1 - taxRate.value / 100
+        totalCost /= SELL_TAX_FACTOR
       }
 
       const materialRows: NodeMaterialRow[] = [{
@@ -1012,20 +1010,9 @@ const planChildren = computed(() => {
             />
           </div>
 
-          <div class="flex justify-between items-center mt-2">
-            <div class="font-size-14px">
-              {{ t('税率%') }}
-            </div>
-            <el-input-number
-              class="w-120px"
-              v-model="marketTaxRate"
-              :min="0"
-              :max="5"
-              :step="5"
-              :step-strictly="true"
-              controls-position="right"
-            />
-          </div>
+          <el-checkbox v-model="includeTax" class="mt-2">
+            {{ t('计算税率') }} ({{ SELL_TAX_RATE }}%)
+          </el-checkbox>
         </el-card>
       </el-col>
 

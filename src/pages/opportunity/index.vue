@@ -8,6 +8,7 @@ import { Search } from "@element-plus/icons-vue"
 import { buildSuperTree } from "@/calculator/superAlchemy"
 import { getOpportunityDataApi, OpportunityScanCancelledError } from "@/common/apis/opportunity"
 import { usePriceStatus } from "@/common/composables/usePriceStatus"
+import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
 import { useGameStore } from "@/pinia/stores/game"
 import { usePlayerStore } from "@/pinia/stores/player"
 import ActionConfig from "../dashboard/components/ActionConfig.vue"
@@ -124,7 +125,7 @@ function showDetail(row: OpportunityRow) {
   if (row.superAlchemy) {
     const tree = buildSuperTree(row.superAlchemy.item, {
       catalystRanks: [0, 1, 2],
-      sellTaxFactor: includeTax.value ? 0.95 : 1,
+      sellTaxFactor: includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR,
       mode: "smart",
       includeRare: includeRare.value
     }, row.superAlchemy.ask)

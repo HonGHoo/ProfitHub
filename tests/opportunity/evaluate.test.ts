@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { evaluateOpportunityPlan } from "@/calculator/opportunity/evaluate"
+import { SELL_TAX_FACTOR } from "@/common/constants/market"
 
 function plan(overrides: Partial<Parameters<typeof evaluateOpportunityPlan>[0]> = {}) {
   return {
     id: "fixture",
-    sellTaxFactor: 0.95,
+    sellTaxFactor: SELL_TAX_FACTOR,
     steps: [{
       id: "step",
       action: "fixture",
@@ -30,8 +31,8 @@ describe("opportunity plan evaluation", () => {
         ]
       }]
     }))
-    expect(value.netProfit).toBe(80)
-    expect(value.profitPH).toBe(4800)
+    expect(value.netProfit).toBe(82)
+    expect(value.profitPH).toBe(4920)
   })
 
   it("a03: does not tax coin income", () => {
@@ -47,10 +48,10 @@ describe("opportunity plan evaluation", () => {
 
   it("a04: ranks by whole-plan net profit per hour", () => {
     const fast = evaluateOpportunityPlan(plan({
-      steps: [{ ...plan().steps[0], timeSec: 600, inputs: [], outputs: [{ hrid: "/items/a", level: 0, count: 1, price: 1000000 / 0.95, source: "market", required: true }] }]
+      steps: [{ ...plan().steps[0], timeSec: 600, inputs: [], outputs: [{ hrid: "/items/a", level: 0, count: 1, price: 1000000 / SELL_TAX_FACTOR, source: "market", required: true }] }]
     }))
     const slow = evaluateOpportunityPlan(plan({
-      steps: [{ ...plan().steps[0], timeSec: 1800, inputs: [], outputs: [{ hrid: "/items/b", level: 0, count: 1, price: 1500000 / 0.95, source: "market", required: true }] }]
+      steps: [{ ...plan().steps[0], timeSec: 1800, inputs: [], outputs: [{ hrid: "/items/b", level: 0, count: 1, price: 1500000 / SELL_TAX_FACTOR, source: "market", required: true }] }]
     }))
     expect(fast.profitPH).toBeCloseTo(6000000)
     expect(slow.profitPH).toBeCloseTo(3000000)
@@ -65,8 +66,8 @@ describe("opportunity plan evaluation", () => {
       ]
     }))
     expect(value.totalCost).toBe(100)
-    expect(value.totalIncome).toBe(190)
-    expect(value.netProfit).toBe(90)
+    expect(value.totalIncome).toBe(192)
+    expect(value.netProfit).toBe(92)
   })
 
   it("a08/a09: missing or estimated market prices are not executable", () => {

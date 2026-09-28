@@ -16,6 +16,7 @@ import { getCraftCostOf } from "@/common/apis/game/craft"
 import { getEquipmentList } from "@/common/apis/player"
 import { useMemory } from "@/common/composables/useMemory"
 import { SHOP_FIXED_PRICES } from "@/common/config"
+import { SELL_TAX_FACTOR, SELL_TAX_RATE } from "@/common/constants/market"
 import { getEquipmentTypeOf } from "@/common/utils/game"
 import { useEnhancerStore } from "@/pinia/stores/enhancer"
 import { COIN_HRID, PRICE_STATUS_LIST, PriceStatus, useGameStore } from "@/pinia/stores/game"
@@ -122,16 +123,13 @@ const costGuideExpandedRowKeys = ref<string[]>([])
 
 const defaultConfig = {
   hourlyRate: 5000000,
-  taxRate: 5,
   enhanceLevel: 10
 }
 
-// Market tax rate: only 0% / 5%.
-// Internally we persist `ignoreTax` (0% => true, 5% => false).
-const marketTaxRate = computed<number>({
-  get: () => (enhancerStore.config.ignoreTax ? 0 : 5),
-  set: (value: number) => {
-    enhancerStore.config.ignoreTax = value === 0
+const includeTax = computed<boolean>({
+  get: () => !enhancerStore.config.ignoreTax,
+  set: (value) => {
+    enhancerStore.config.ignoreTax = !value
   }
 })
 
@@ -1067,7 +1065,7 @@ const results = computed(() => {
   console.time("[强化分解] results")
   const result = []
   const ignoreTax = !!enhancerStore.config.ignoreTax
-  const sellTaxFactor = ignoreTax ? 1 : 0.95
+  const sellTaxFactor = ignoreTax ? 1 : SELL_TAX_FACTOR
   const enhanceLevel = enhancerStore.enhanceLevel ?? defaultConfig.enhanceLevel
   for (let i = 1; i <= enhanceLevel; ++i) {
     const calc = new EnhanceCalculator({
@@ -1091,9 +1089,8 @@ const results = computed(() => {
     const totalCostNoHourly = matCost + gearCost
     let totalCost = totalCostNoHourly + (enhancerStore.hourlyRate ?? defaultConfig.hourlyRate) * (actions / calc.actionsPH)
     if (!ignoreTax) {
-      // 游戏税从到账里扣（到账=卖价×0.95），想净得 totalCost 挂单价须 ÷(1-税率)；
-      // 旧写法 ×(1+税率) 会少收 0.25%（×1.05×0.95=0.9975）
-      totalCost /= 1 - (enhancerStore.taxRate ?? defaultConfig.taxRate) / 100
+      // 挂单价须除以到账比例，才能在扣税后收回总成本。
+      totalCost /= SELL_TAX_FACTOR
     }
 
     const productPrice = typeof currentItem.value.productPrice === "number"
@@ -1531,22 +1528,6 @@ watch(menuVisible, (value) => {
                   width="120px"
                 />
               </div>
-
-              <div class="flex justify-between items-center">
-                <div class="font-size-14px">
-                  {{ t('溢价率%') }}
-                </div>
-                <el-input-number
-                  class="w-120px"
-                  v-model="enhancerStore.config.taxRate"
-                  :step="5"
-                  :step-strictly="true"
-                  :min="0"
-                  :max="5"
-                  controls-position="right"
-                  :placeholder="defaultConfig.taxRate.toString()"
-                />
-              </div>
             </el-tab-pane>
             <el-tab-pane>
               <template #label>
@@ -1605,26 +1586,9 @@ watch(menuVisible, (value) => {
                 </div>
               </div>
 
-              <div
-                class="grid w-full items-center gap-x-1 gap-y-1 mt-2"
-                :style="{ gridTemplateColumns: '44px minmax(0, 1fr)' }"
-              >
-                <div class="font-size-14px whitespace-nowrap">
-                  {{ t('税率%') }}
-                </div>
-                <el-input-number
-                  class="w-full"
-                  style="width: 100%"
-                  v-model="marketTaxRate"
-                  :step="5"
-                  :step-strictly="true"
-                  :min="0"
-                  :max="5"
-                  controls-position="right"
-                  :controls="true"
-                  disabled
-                />
-              </div>
+              <el-checkbox v-model="includeTax" class="mt-2">
+                {{ t('计算税率') }} ({{ SELL_TAX_RATE }}%)
+              </el-checkbox>
             </el-tab-pane>
           </el-tabs>
         </el-card>

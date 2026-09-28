@@ -20,7 +20,7 @@ export interface CalculatorConfig {
   catalystRank?: number
   enhanceLevel?: number
   originLevel?: number
-  /** 市场卖出税率因子：默认 0.95(5%税)；设为 1 表示不计税 */
+  /** 市场卖出税率因子：默认按游戏税率；设为 1 表示不计税 */
   sellTaxFactor?: number
   /** false 时产物剔除稀有掉落与额外精华掉落（采集/炼金系），默认 true */
   includeRare?: boolean
@@ -42,7 +42,7 @@ export default abstract class Calculator {
   hasManualPrice: boolean = false
   config: CalculatorConfig
   enhanceLevel: number = 0
-  /** 市场卖出税率因子：默认 0.95(5%税)；设为 1 表示不计税 */
+  /** 市场卖出税率因子：默认按游戏税率；设为 1 表示不计税 */
   sellTaxFactor: number = SELL_TAX_FACTOR
   constructor(config: CalculatorConfig) {
     const { hrid, project, action, ingredientPriceConfigList = [], productPriceConfigList = [], catalystRank } = config

@@ -85,8 +85,8 @@ function calculatorRow(cal: Calculator, family: OpportunityFamily, snapshotId: s
   }
 }
 
-function superAlchemyRow(row: SuperAlchemyRow, snapshotId: string): OpportunityRow {
-  const plan = adaptSuperAlchemyToPlan(row)
+function superAlchemyRow(row: SuperAlchemyRow, snapshotId: string, sellTaxFactor: number): OpportunityRow {
+  const plan = adaptSuperAlchemyToPlan(row, sellTaxFactor)
   const evaluation = evaluateOpportunityPlan(plan)
   const totalCost = evaluation.totalCost
   const totalIncome = evaluation.totalIncome
@@ -125,12 +125,8 @@ function superAlchemyRow(row: SuperAlchemyRow, snapshotId: string): OpportunityR
  * every other family.  Intermediate products stay internal; only the root
  * purchase, step consumptions and terminal/cycle-cut sales cross the boundary.
  */
-function adaptSuperAlchemyToPlan(row: SuperAlchemyRow) {
+function adaptSuperAlchemyToPlan(row: SuperAlchemyRow, sellTaxFactor: number) {
   const steps: OpportunityRow["steps"] = []
-  const rootBid = getPriceOf(row.item.hrid, 0).bid
-  const taxFactor = row.eval.sellValue > 0 && typeof rootBid === "number" && rootBid > 0
-    ? Math.min(1, row.eval.sellValue / rootBid)
-    : SELL_TAX_FACTOR
   const outputs: OpportunityRow["externalOutputs"] = []
   const addSale = (hrid: string, count: number, isCoin = false) => {
     if (isCoin) {
@@ -185,7 +181,7 @@ function adaptSuperAlchemyToPlan(row: SuperAlchemyRow) {
       inputs: [],
       outputs
     }],
-    sellTaxFactor: taxFactor
+    sellTaxFactor
   }
 }
 
@@ -273,7 +269,7 @@ export async function getOpportunityDataApi(options: OpportunityOptions, onProgr
       if (result.limited) limitReasons.push(`多步炼金达到节点上限 ${options.maxAlchemyNodes ?? 6000}（已展开 ${result.nodeCount}）`)
       if (result.cycleCuts > 0) limitReasons.push(`多步炼金切断 ${result.cycleCuts} 条环路`)
       for (const row of result.rows) {
-        rows.push(superAlchemyRow(row, snapshotId))
+        rows.push(superAlchemyRow(row, snapshotId, tax))
       }
       await progress("多步炼金", "多步炼金")
     }

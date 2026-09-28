@@ -71,7 +71,6 @@ export const useEnhancerStore = defineStore("enhancer", {
   getters: {
     enhanceLevel: state => state.config.enhanceLevel,
     hourlyRate: state => state.config.hourlyRate,
-    taxRate: state => state.config.taxRate,
     hrid: state => state.config.hrid,
     originLevel: state => state.config.originLevel,
     escapeLevel: state => state.config.escapeLevel,
@@ -107,7 +106,7 @@ export interface EnhancerConfig {
   originLevel?: number
   enhanceLevel?: number
   hourlyRate?: number
-  taxRate?: number
+  premiumRate?: number
   ignoreTax?: boolean
   hrid?: string
   tab?: string
@@ -116,10 +115,8 @@ const KEY_PREFIX = "enhancer-"
 function loadConfig(): EnhancerConfig {
   try {
     const cfg = JSON.parse(localStorage.getItem(`${KEY_PREFIX}config`) || "{}")
-    // 旧版市场税率为 2，迁移到 5（advancedConfig 的 taxRate 是溢价率，不迁移）
-    if (cfg.taxRate === 2) {
-      cfg.taxRate = 5
-    }
+    // 旧版存储的页面税率不再参与计算。
+    delete cfg.taxRate
     return {
       ignoreTax: !!cfg.ignoreTax,
       ...cfg
@@ -136,6 +133,11 @@ function saveConfig(item: EnhancerConfig) {
 function loadAdvancedConfig(): EnhancerConfig {
   try {
     const cfg = JSON.parse(localStorage.getItem(`${KEY_PREFIX}advancedConfig`) || "{}")
+    // 进阶页旧字段名是 taxRate，实际用于「溢价率」。
+    if (cfg.premiumRate === undefined && typeof cfg.taxRate === "number") {
+      cfg.premiumRate = cfg.taxRate
+    }
+    delete cfg.taxRate
     return {
       ignoreTax: !!cfg.ignoreTax,
       ...cfg

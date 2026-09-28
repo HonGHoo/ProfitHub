@@ -47,7 +47,7 @@ export async function getDataApi(params: any) {
 
 /**
  * 直接强化全量候选。调用者可传入统一的税率口径，避免全市场排行把
- * 默认 5% 税的强化结果和“未计税”的其它路线混在一起。
+ * 默认计税的强化结果和“未计税”的其它路线混在一起。
  */
 export function calcSuperEnhanceProfit(sellTaxFactor: number = SELL_TAX_FACTOR) {
   const gameData = getGameDataApi()
