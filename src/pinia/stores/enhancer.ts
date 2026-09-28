@@ -106,7 +106,6 @@ export interface EnhancerConfig {
   originLevel?: number
   enhanceLevel?: number
   hourlyRate?: number
-  premiumRate?: number
   ignoreTax?: boolean
   hrid?: string
   tab?: string
@@ -133,11 +132,9 @@ function saveConfig(item: EnhancerConfig) {
 function loadAdvancedConfig(): EnhancerConfig {
   try {
     const cfg = JSON.parse(localStorage.getItem(`${KEY_PREFIX}advancedConfig`) || "{}")
-    // 进阶页旧字段名是 taxRate，实际用于「溢价率」。
-    if (cfg.premiumRate === undefined && typeof cfg.taxRate === "number") {
-      cfg.premiumRate = cfg.taxRate
-    }
+    // 历史页面税率和未接入计算的溢价率不再保留。
     delete cfg.taxRate
+    delete cfg.premiumRate
     return {
       ignoreTax: !!cfg.ignoreTax,
       ...cfg

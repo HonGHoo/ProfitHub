@@ -70,7 +70,6 @@ const currentDecompose = ref({
 
 const defaultConfig = {
   hourlyRate: 5000000,
-  premiumRate: 5,
   enhanceLevel: 10,
   originLevel: 0,
   escapeLevel: -1
@@ -823,20 +822,9 @@ watch(menuVisible, (value) => {
                 />
               </div>
 
-              <div class="flex justify-between items-center">
-                <div class="font-size-14px">
-                  {{ t('溢价率%') }}
-                </div>
-                <el-input-number
-                  class="w-120px"
-                  v-model="enhancerStore.advancedConfig.premiumRate"
-                  :step="1"
-                  :min="0"
-                  controls-position="right"
-                  :controls="true"
-                  :placeholder="defaultConfig.premiumRate.toString()"
-                />
-              </div>
+              <el-checkbox v-model="includeTax" class="mt-2">
+                {{ t('计算税率') }} ({{ SELL_TAX_RATE }}%)
+              </el-checkbox>
             </el-tab-pane>
             <el-tab-pane :label="t('成品售价')">
               <div
