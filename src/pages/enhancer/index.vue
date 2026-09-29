@@ -2,8 +2,8 @@
 import type { Action, ItemDetail } from "~/game"
 import ItemIcon from "@@/components/ItemIcon/index.vue"
 import TieredPriceInput from "@@/components/TieredPriceInput/index.vue"
-
 import * as Format from "@@/utils/format"
+
 import { Setting, Star, StarFilled } from "@element-plus/icons-vue"
 import { ElTable } from "element-plus"
 import { useRoute } from "vue-router"
@@ -14,6 +14,7 @@ import { WorkflowCalculator } from "@/calculator/workflow"
 import { getItemDetailOf, getMarketDataApi, getPriceOf, priceStepOf } from "@/common/apis/game"
 import { getCraftCostOf } from "@/common/apis/game/craft"
 import { getEquipmentList } from "@/common/apis/player"
+import PriceInput from "@/common/components/PriceInput/index.vue"
 import { useMemory } from "@/common/composables/useMemory"
 import { SHOP_FIXED_PRICES } from "@/common/config"
 import { SELL_TAX_FACTOR, SELL_TAX_RATE } from "@/common/constants/market"
@@ -1342,7 +1343,7 @@ watch(menuVisible, (value) => {
 
                 <el-table-column :label="t('价格')" align="center" min-width="170">
                   <template #default="{ row }">
-                    <el-input-number
+                    <PriceInput
                       v-if="row.hrid !== COIN_HRID"
                       class="max-w-100%"
                       style="width: 100%"
@@ -1392,7 +1393,7 @@ watch(menuVisible, (value) => {
             <el-table-column prop="count" />
             <el-table-column min-width="170" align="center">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   class="max-w-100%"
                   style="width: 100%"
                   v-model="row.price"
@@ -1549,7 +1550,7 @@ watch(menuVisible, (value) => {
                 <div class="font-size-14px whitespace-nowrap">
                   {{ t('价格') }}
                 </div>
-                <el-input-number
+                <PriceInput
                   class="w-full"
                   style="width: 100%"
                   v-model="currentItem.productPrice"
@@ -1622,7 +1623,7 @@ watch(menuVisible, (value) => {
 
             <el-table-column :label="t('价格')" align="center" min-width="170">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   v-if="row.hrid !== COIN_HRID"
                   class="max-w-100%"
                   style="width: 100%"
@@ -1658,7 +1659,7 @@ watch(menuVisible, (value) => {
             </el-table-column>
             <el-table-column min-width="170" align="center">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   class="max-w-100%"
                   style="width: 100%"
                   v-model="row.protection.price"

@@ -6,7 +6,7 @@ import { PriceStatus, useGameStoreOutside } from "@/pinia/stores/game"
 /** 制造系动作（锻造/制造/裁缝），与强化页 calcBestManufacturePlan 同口径 */
 const MANUFACTURE_ACTIONS = ["cheesesmithing", "crafting", "tailoring"] as const
 export type ManufactureAction = typeof MANUFACTURE_ACTIONS[number]
-export type MaterialPriceSource = "market" | "shop" | "craft"
+export type MaterialPriceSource = "market" | "shop" | "craft" | "custom"
 export type MaterialPriceSelection = PriceStatus | "CRAFT_ASK" | "CRAFT_BID"
 
 /** 只展示能算出有效价格的次级材料选项，避免整条来源成本变为空。 */
@@ -27,6 +27,9 @@ export interface FinalStepMaterialCostItem {
   artisanApplied: boolean
   priceSource: MaterialPriceSource
   priceStatus: MaterialPriceSelection
+  /** The chosen market side has no order, even when a fallback price is available. */
+  missingMarketPrice: boolean
+  customPrice: boolean
 }
 
 export interface FinalStepMaterialCostBreakdown {
@@ -110,7 +113,7 @@ function resolveMaterialPrice(hrid: string, priceStatus: MaterialPriceSelection)
   return { price: getCraftCostOf(hrid), source: "craft" }
 }
 
-function finalStepMaterialCost(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection>, defaultPriceStatus: PriceStatus): FinalStepMaterialCostBreakdown | null {
+function finalStepMaterialCost(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection>, defaultPriceStatus: PriceStatus, customPrices: Record<string, number>): FinalStepMaterialCostBreakdown | null {
   const key = hrid.substring(hrid.lastIndexOf("/") + 1)
   let best: FinalStepMaterialCostBreakdown | null = null
   for (const action of MANUFACTURE_ACTIONS) {
@@ -118,65 +121,41 @@ function finalStepMaterialCost(hrid: string, priceStatusOverrides: Record<string
     if (!ad) continue
     const items: FinalStepMaterialCostItem[] = []
     let ok = true
+    const addItem = (itemHrid: string, baseCount: number, count: number, artisanApplied: boolean) => {
+      const priceStatus = priceStatusOverrides[itemHrid] ?? defaultPriceStatus
+      const customPrice = customPrices[itemHrid]
+      const hasCustomPrice = typeof customPrice === "number" && Number.isFinite(customPrice) && customPrice >= 0
+      const marketPrice = getPriceOf(itemHrid, 0, priceStatus === "CRAFT_BID" ? PriceStatus.BID : priceStatus === "CRAFT_ASK" ? PriceStatus.ASK : priceStatus, useGameStoreOutside().sellStatus).ask
+      const resolved = hasCustomPrice ? { price: customPrice, source: "custom" as const } : resolveMaterialPrice(itemHrid, priceStatus)
+      if (resolved.price < 0) ok = false
+      items.push({ hrid: itemHrid, baseCount, count, unitPrice: resolved.price, subtotal: resolved.price < 0 ? 0 : resolved.price * count, artisanApplied, priceSource: resolved.source, priceStatus, missingMarketPrice: !hasCustomPrice && priceStatus !== "CRAFT_ASK" && priceStatus !== "CRAFT_BID" && marketPrice < 0, customPrice: hasCustomPrice })
+    }
     if (ad.upgradeItemHrid) {
-      const priceStatus = priceStatusOverrides[ad.upgradeItemHrid] ?? defaultPriceStatus
-      const resolved = resolveMaterialPrice(ad.upgradeItemHrid, priceStatus)
-      if (resolved.price < 0) {
-        ok = false
-      } else {
-        items.push({
-          hrid: ad.upgradeItemHrid,
-          baseCount: 1,
-          count: 1,
-          unitPrice: resolved.price,
-          subtotal: resolved.price,
-          artisanApplied: false,
-          priceSource: resolved.source,
-          priceStatus
-        })
-      }
+      addItem(ad.upgradeItemHrid, 1, 1, false)
     }
     const artisanBuff = getBuffOf(action, "Artisan")
-    if (ok) {
-      for (const input of ad.inputItems) {
-        const priceStatus = priceStatusOverrides[input.itemHrid] ?? defaultPriceStatus
-        const resolved = resolveMaterialPrice(input.itemHrid, priceStatus)
-        if (resolved.price < 0) {
-          ok = false
-          break
-        }
-        const count = input.count * (1 - artisanBuff)
-        items.push({
-          hrid: input.itemHrid,
-          baseCount: input.count,
-          count,
-          unitPrice: resolved.price,
-          subtotal: resolved.price * count,
-          artisanApplied: true,
-          priceSource: resolved.source,
-          priceStatus
-        })
-      }
+    for (const input of ad.inputItems) {
+      addItem(input.itemHrid, input.count, input.count * (1 - artisanBuff), true)
     }
-    if (!ok) continue
-    const total = items.reduce((sum, item) => sum + item.subtotal, 0)
-    if (!best || total < best.total) best = { action, artisanBuff, items, total }
+    const total = ok ? items.reduce((sum, item) => sum + item.subtotal, 0) : -1
+    if (!best || (total >= 0 && (best.total < 0 || total < best.total))) best = { action, artisanBuff, items, total }
   }
   return best
 }
 
 const materialCostCache = new Map<string, FinalStepMaterialCostBreakdown | null>()
 
-export function getMaterialCostBreakdownOf(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection> = {}, defaultPriceStatus?: PriceStatus): FinalStepMaterialCostBreakdown | null {
+export function getMaterialCostBreakdownOf(hrid: string, priceStatusOverrides: Record<string, MaterialPriceSelection> = {}, defaultPriceStatus?: PriceStatus, customPrices: Record<string, number> = {}): FinalStepMaterialCostBreakdown | null {
   const gameStore = useGameStoreOutside()
   const effectivePriceStatus = defaultPriceStatus ?? gameStore.buyStatus
   const ts = gameStore.marketData?.timestamp ?? 0
   const artisanKey = MANUFACTURE_ACTIONS.map(action => getBuffOf(action, "Artisan")).join("|")
   const overrideKey = Object.entries(priceStatusOverrides).sort(([a], [b]) => a.localeCompare(b)).map(([itemHrid, status]) => `${itemHrid}:${status}`).join(",")
-  const cacheKey = `${ts}|${gameStore.buyStatus}|${gameStore.sellStatus}|${effectivePriceStatus}|${artisanKey}|${hrid}|${overrideKey}`
+  const customKey = Object.entries(customPrices).sort(([a], [b]) => a.localeCompare(b)).map(([itemHrid, price]) => `${itemHrid}:${price}`).join(",")
+  const cacheKey = `${ts}|${gameStore.buyStatus}|${gameStore.sellStatus}|${effectivePriceStatus}|${artisanKey}|${hrid}|${overrideKey}|${customKey}`
   const cached = materialCostCache.get(cacheKey)
   if (cached !== undefined) return cached
-  const value = finalStepMaterialCost(hrid, priceStatusOverrides, effectivePriceStatus)
+  const value = finalStepMaterialCost(hrid, priceStatusOverrides, effectivePriceStatus, customPrices)
   materialCostCache.set(cacheKey, value)
   return value
 }

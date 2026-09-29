@@ -275,7 +275,10 @@ export const useGameStore = defineStore("game", {
       // 如果缓存数据的时间戳与新数据相同，则不更新
       const sameTimestamp = this.marketData?.timestamp && this.marketData?.timestamp === newMarketData.timestamp
       // 兼容：老缓存 marketData 里没有 avg/vol 字段，但 timestamp 可能相同，导致无法触发结构升级
-      if (sameTimestamp && hasAvgVolFields(this.marketData)) {
+      const hasStaleBid = Object.entries(newMarketData.marketData).some(([hrid, levels]) =>
+        Object.entries(levels ?? {}).some(([level, price]) =>
+          price?.b === -1 && (this.marketData?.marketData[hrid]?.[level]?.bid ?? -1) >= 0))
+      if (sameTimestamp && hasAvgVolFields(this.marketData) && !hasStaleBid) {
         return
       }
 
@@ -479,9 +482,7 @@ export async function updateMarketData(oldData: MarketData | null, newData: Mark
       if (price.ask === -1 && hrid !== "/items/philosophers_stone") {
         price.ask = (oldMarket[hrid]?.[level] as MarketItemPrice)?.ask || -1
       }
-      if (price.bid === -1) {
-        price.bid = (oldMarket[hrid]?.[level] as MarketItemPrice)?.bid || -1
-      }
+      // 收单消失必须保留本次快照的 -1；沿用旧价会把缺价伪装成仍可交易。
       if ((price.avg ?? -1) === -1) {
         price.avg = (oldMarket[hrid]?.[level] as MarketItemPrice)?.avg ?? -1
       }
