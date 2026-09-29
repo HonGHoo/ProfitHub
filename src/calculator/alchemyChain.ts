@@ -325,6 +325,7 @@ export interface StoneSourceRow {
   buyPrice: number
   /** true = 按自制成本计价（无卖单回退，或勾选自制比价后材料成本更低） */
   useCraft?: boolean
+  customBuyPrice?: boolean
   /** 市场卖单价（无卖单为 -1），勾选自制比价时供对比展示 */
   marketAsk?: number
   /** 买材料自制的纯材料成本（无制造配方为 -1） */
@@ -351,7 +352,7 @@ export interface StoneLeaderboardResult {
  * 贤者之石获取排行：扫全部物品，找转化掉落表/分解产物里含贤者之石的来源，
  * 复用转化/分解计算器（含催化剂成本、稀有掉落、税），按单颗净成本升序。
  */
-export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean, materialPriceStatusOverrides?: Record<string, Record<string, MaterialPriceSelection>> }): StoneLeaderboardResult {
+export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFactor: number, includeRare: boolean, craftMode?: boolean, materialPriceStatusOverrides?: Record<string, Record<string, MaterialPriceSelection>>, materialPriceOverrides?: Record<string, Record<string, number>>, sourcePriceOverrides?: Record<string, number> }): StoneLeaderboardResult {
   const gameData = getGameDataApi()
   const stoneBid = getPriceOf(STONE_HRID, 0).bid
   const stoneAsk = getPriceOf(STONE_HRID, 0).ask
@@ -377,28 +378,33 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const a = getPriceOf(cand.hrid, lv).ask
       if (typeof a === "number" && a > 0 && (marketAsk < 0 || a < marketAsk)) marketAsk = a
     }
-    const craftBreakdown = getMaterialCostBreakdownOf(cand.hrid, opts.materialPriceStatusOverrides?.[cand.hrid])
+    const craftBreakdown = getMaterialCostBreakdownOf(cand.hrid, opts.materialPriceStatusOverrides?.[cand.hrid], undefined, opts.materialPriceOverrides?.[cand.hrid])
     const craftCost = craftBreakdown?.total ?? -1
     // 生效买价：勾选「买材料自制」时一律按材料成本计（无制造配方的回退市场价）；
     // 未勾选保持原逻辑：有卖单用卖单价，无卖单回退制造成本（买不到就自己造）
     let buyPrice: number
     let useCraft = false
-    if (opts.craftMode && craftCost > 0) {
+    const customBuyPrice = opts.sourcePriceOverrides?.[cand.hrid]
+    const hasCustomBuyPrice = typeof customBuyPrice === "number" && Number.isFinite(customBuyPrice) && customBuyPrice > 0
+    if (hasCustomBuyPrice) {
+      buyPrice = customBuyPrice
+    } else if (opts.craftMode && craftCost > 0) {
       buyPrice = craftCost
       useCraft = true
     } else if (marketAsk >= 0) {
       buyPrice = marketAsk
     } else {
-      buyPrice = getCraftCostOf(cand.hrid)
+      buyPrice = craftCost > 0 ? craftCost : getCraftCostOf(cand.hrid)
       useCraft = buyPrice > 0
     }
     if (!(buyPrice > 0)) {
       excludedCount++
+      rows.push({ hrid: cand.hrid, method: cand.method, catalystRankUsed: 0, stonesPerAction: 0, buyPrice: -1, marketAsk, craftCost, craftBreakdown, byproductIncome: 0, costPerStone: -1 })
       continue
     }
     const ranks = opts.catalystRank === -1 ? [0, 1, 2] : [opts.catalystRank]
     // 自制计价时把生效价锁进计算器（immutable 优先级最高，覆盖台账/市场价）
-    const ingredientPriceConfigList = useCraft
+    const ingredientPriceConfigList = useCraft || hasCustomBuyPrice
       ? [{ hrid: cand.hrid, immutable: true, price: buyPrice }]
       : []
     let best: StoneSourceRow | null = null
@@ -420,11 +426,11 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const byproductIncome = calc.income * succ - stoneValuePerAttempt
       const costPerStone = (calc.cost - byproductIncome) / stonesPerAction
       if (!Number.isFinite(costPerStone)) continue
-      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, useCraft, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone }
+      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, useCraft, customBuyPrice: hasCustomBuyPrice, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone }
       if (!best || row.costPerStone < best.costPerStone) best = row
     }
     if (best) rows.push(best)
   }
-  rows.sort((a, b) => a.costPerStone - b.costPerStone)
+  rows.sort((a, b) => (a.stonesPerAction === 0 ? Infinity : a.costPerStone) - (b.stonesPerAction === 0 ? Infinity : b.costPerStone))
   return { rows, stoneBid, stoneAsk, excludedCount }
 }

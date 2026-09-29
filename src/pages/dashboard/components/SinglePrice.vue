@@ -2,6 +2,7 @@
 import type { StoragePriceItem } from "@/pinia/stores/price"
 import { ElPopover } from "element-plus"
 import { setSinglePriceApi } from "@/common/apis/price"
+import PriceInput from "@/common/components/PriceInput/index.vue"
 
 const props = defineProps<{
   data?: StoragePriceItem
@@ -70,11 +71,11 @@ const { t } = useI18n()
       </el-form-item>
       <el-form-item v-if="priceMode !== 'sell'" :label="t('买')">
         <el-switch v-model="form.ask.manual" :active-text="t('自定义')" :inactive-text="t('市场价')" inline-prompt style="--el-switch-off-color: #13ce66" />
-        <el-input-number v-if="form.ask.manual" style="margin-left:10px" v-model="form.ask.manualPrice" :disabled="!form.ask.manual" :controls="false" />
+        <PriceInput v-if="form.ask.manual" style="margin-left:10px" v-model="form.ask.manualPrice" :disabled="!form.ask.manual" />
       </el-form-item>
       <el-form-item v-if="priceMode !== 'buy'" :label="t('卖')">
         <el-switch v-model="form.bid.manual" :active-text="t('自定义')" :inactive-text="t('市场价')" inline-prompt style="--el-switch-off-color: #13ce66" />
-        <el-input-number v-if="form.bid.manual" style="margin-left:10px" v-model="form.bid.manualPrice" :disabled="!form.bid.manual" :controls="false" />
+        <PriceInput v-if="form.bid.manual" style="margin-left:10px" v-model="form.bid.manualPrice" :disabled="!form.bid.manual" />
       </el-form-item>
     </el-form>
     <el-button style="display:block; margin:auto;" type="primary" @click="onConfirm">

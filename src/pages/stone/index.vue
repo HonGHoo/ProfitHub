@@ -13,6 +13,7 @@ import { isMaterialPriceSelectionAvailable, type MaterialPriceSelection } from "
 import { getBuffOf } from "@/common/apis/player"
 import { usePriceStatus } from "@/common/composables/usePriceStatus"
 import { NO_TAX_FACTOR, SELL_TAX_FACTOR } from "@/common/constants/market"
+import { formatPriceInput, parsePriceInput } from "@/common/utils/priceInput"
 import { PriceStatus, useGameStore } from "@/pinia/stores/game"
 import { usePlayerStore } from "@/pinia/stores/player"
 import ActionConfig from "../dashboard/components/ActionConfig.vue"
@@ -29,6 +30,10 @@ const craftMode = useMemory("stone-craft-mode", false)
 const stonePriceOverride = useMemory("stone-price-override", null as number | null)
 const fragmentProductPriceOverrides = useMemory("stone-fragment-product-price-overrides", {} as Record<string, number>)
 const materialPriceStatusOverrides = useMemory("stone-material-price-status-overrides", {} as Record<string, Record<string, MaterialPriceSelection>>, 0)
+const materialPriceOverrides = useMemory("stone-material-price-overrides", {} as Record<string, Record<string, number>>, 0)
+const materialPriceInputs = ref<Record<string, string>>({})
+const sourcePriceOverrides = useMemory("stone-source-price-overrides", {} as Record<string, number>, 0)
+const sourcePriceInputs = ref<Record<string, string>>({})
 // 旧选项迁移到市场左/右与自制左/右。
 const migratedMaterialPrices = Object.fromEntries(Object.entries(materialPriceStatusOverrides.value as Record<string, Record<string, string>>).map(([source, materials]) => [
   source,
@@ -77,14 +82,77 @@ const stoneBidAfterTax = computed(() => stonePrice.value < 0 ? -1 : stonePrice.v
 const itemName = (hrid: string) => t(getItemDetailOf(hrid)?.name ?? hrid)
 
 function parsePrice(value: string): number | null {
-  const normalized = value.replaceAll(",", "").trim()
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null
-  const price = Number(normalized)
-  return Number.isFinite(price) && price <= Number.MAX_SAFE_INTEGER ? price : null
+  return parsePriceInput(value)
 }
 
 function priceText(value: number): string {
-  return Number.isFinite(value) && value >= 0 ? String(value) : ""
+  return formatPriceInput(value)
+}
+
+function materialInputKey(sourceHrid: string, materialHrid: string) {
+  return `${sourceHrid}|${materialHrid}`
+}
+
+function materialInputValue(sourceHrid: string, materialHrid: string, fallback: number) {
+  const key = materialInputKey(sourceHrid, materialHrid)
+  return materialPriceInputs.value[key] ?? priceText(materialPriceOverrides.value[sourceHrid]?.[materialHrid] ?? fallback)
+}
+
+function onMaterialPriceInput(sourceHrid: string, materialHrid: string, value: string) {
+  const key = materialInputKey(sourceHrid, materialHrid)
+  materialPriceInputs.value[key] = value
+  const price = parsePrice(value)
+  if (price !== null) {
+    materialPriceOverrides.value = {
+      ...materialPriceOverrides.value,
+      [sourceHrid]: { ...materialPriceOverrides.value[sourceHrid], [materialHrid]: price }
+    }
+  }
+}
+
+function finishMaterialPriceInput(sourceHrid: string, materialHrid: string) {
+  const key = materialInputKey(sourceHrid, materialHrid)
+  const value = materialPriceInputs.value[key] ?? ""
+  if (!value.trim()) {
+    resetMaterialPrice(sourceHrid, materialHrid)
+    return
+  }
+  const price = parsePrice(value)
+  if (price === null) ElMessage.warning(t("请输入有效的非负价格"))
+  materialPriceInputs.value[key] = priceText(materialPriceOverrides.value[sourceHrid]?.[materialHrid] ?? -1)
+}
+
+function resetMaterialPrice(sourceHrid: string, materialHrid: string) {
+  const next = { ...materialPriceOverrides.value }
+  const prices = { ...next[sourceHrid] }
+  delete prices[materialHrid]
+  if (Object.keys(prices).length) next[sourceHrid] = prices
+  else delete next[sourceHrid]
+  materialPriceOverrides.value = next
+  delete materialPriceInputs.value[materialInputKey(sourceHrid, materialHrid)]
+}
+
+function onSourcePriceInput(hrid: string, value: string) {
+  sourcePriceInputs.value[hrid] = value
+  const price = parsePrice(value)
+  if (price !== null && price > 0) sourcePriceOverrides.value = { ...sourcePriceOverrides.value, [hrid]: price }
+}
+
+function finishSourcePriceInput(hrid: string) {
+  const value = sourcePriceInputs.value[hrid] ?? ""
+  if (!value.trim()) {
+    resetSourcePrice(hrid)
+    return
+  }
+  if (parsePrice(value) === null) ElMessage.warning(t("请输入有效的非负价格"))
+  sourcePriceInputs.value[hrid] = priceText(sourcePriceOverrides.value[hrid] ?? -1)
+}
+
+function resetSourcePrice(hrid: string) {
+  const next = { ...sourcePriceOverrides.value }
+  delete next[hrid]
+  sourcePriceOverrides.value = next
+  delete sourcePriceInputs.value[hrid]
 }
 
 function expectedCountText(value: number): string {
@@ -299,6 +367,7 @@ function priceStatusLabel(status: MaterialPriceSelection) {
 }
 
 function priceSourceLabel(source: string, status: MaterialPriceSelection) {
+  if (source === "custom") return t("自定义价格")
   if (source === "shop") return t("商店固定价")
   if (status === "CRAFT_ASK" || status === "CRAFT_BID") return priceStatusLabel(status)
   if (source === "craft") return t("制造价回退")
@@ -325,7 +394,11 @@ function setMaterialPriceStatus(sourceHrid: string, materialHrid: string, status
 }
 
 function hasCustomMaterialPrice(sourceHrid: string) {
-  return Object.keys(materialPriceStatusOverrides.value[sourceHrid] ?? {}).length > 0
+  return Object.hasOwn(sourcePriceOverrides.value, sourceHrid) || Object.keys(materialPriceOverrides.value[sourceHrid] ?? {}).length > 0
+}
+
+function hasMissingMaterialPrice(row: StoneSourceRow) {
+  return row.craftBreakdown?.items.some(item => item.missingMarketPrice && !item.customPrice) ?? false
 }
 
 const hasMaterialPriceOverrides = computed(() => Object.keys(materialPriceStatusOverrides.value).length > 0)
@@ -374,7 +447,9 @@ function compute() {
       sellTaxFactor: includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR,
       includeRare: includeRare.value,
       craftMode: craftMode.value,
-      materialPriceStatusOverrides: cleanedOverrides
+      materialPriceStatusOverrides: cleanedOverrides,
+      materialPriceOverrides: materialPriceOverrides.value,
+      sourcePriceOverrides: sourcePriceOverrides.value
     })
   } catch (e) {
     console.error(e)
@@ -388,6 +463,8 @@ watch(() => gameStore.marketData?.timestamp, () => compute())
 watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
 watch(() => playerStore.config, () => compute(), { deep: true })
 watch(materialPriceStatusOverrides, () => compute(), { deep: true })
+watch(materialPriceOverrides, () => compute(), { deep: true })
+watch(sourcePriceOverrides, () => compute(), { deep: true })
 </script>
 
 <template>
@@ -497,7 +574,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
     <el-card v-if="stoneResult" class="mt-4">
       <template #header>
         <div class="flex items-center justify-between flex-wrap gap-2">
-          <span>{{ t('{0} 种来源参与排行（无卖单的按制造成本计入，{1} 种无法定价未计入）', [stoneResult.rows.length, stoneResult.excludedCount]) }}</span>
+          <span>{{ t('{0} 种来源参与排行（无卖单的按制造成本计入，{1} 种无法定价未计入）', [stoneResult.rows.length - stoneResult.excludedCount, stoneResult.excludedCount]) }}</span>
           <div class="stone-price-editor">
             <span>{{ t('贤者之石价格') }}：</span>
             <el-input
@@ -540,7 +617,9 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                   >
                     <ItemIcon :hrid="row.hrid" :width="20" :height="20" />
                     <span>{{ itemName(row.hrid) }}</span>
-                    <span v-if="hasCustomMaterialPrice(row.hrid)" class="custom-price-marker">[{{ t('自') }}]</span>
+                    <span v-if="row.buyPrice < 0" class="missing-price-marker">[{{ t('缺') }}]</span>
+                    <span v-else-if="hasCustomMaterialPrice(row.hrid)" class="custom-price-marker">[{{ t('自') }}]</span>
+                    <span v-else-if="row.marketAsk < 0 || hasMissingMaterialPrice(row)" class="missing-price-marker">[{{ t('缺') }}]</span>
                   </span>
                   <el-button
                     link
@@ -575,6 +654,20 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                     <el-icon><Close /></el-icon>
                   </el-button>
                 </div>
+                <div class="source-price-editor flex items-center gap-2 mb-2">
+                  <span>{{ t('自定义价格') }}：</span>
+                  <el-input
+                    :model-value="sourcePriceInputs[row.hrid] ?? priceText(sourcePriceOverrides[row.hrid] ?? row.buyPrice)"
+                    size="small"
+                    inputmode="decimal"
+                    :aria-label="`${itemName(row.hrid)} ${t('自定义价格')}`"
+                    @input="onSourcePriceInput(row.hrid, $event)"
+                    @blur="finishSourcePriceInput(row.hrid)"
+                  />
+                  <el-button v-if="row.customBuyPrice" link size="small" @click="resetSourcePrice(row.hrid)">
+                    {{ t('重置') }}
+                  </el-button>
+                </div>
                 <template v-if="row.craftBreakdown">
                   <div class="font-size-12px color-gray-500 mb-2">
                     {{ t('途径') }}：{{ actionLabel(row.craftBreakdown.action) }} ·
@@ -591,6 +684,8 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                     <span class="flex items-center gap-1 min-w-0">
                       <ItemIcon :hrid="item.hrid" :width="18" :height="18" />
                       <span class="truncate">{{ itemName(item.hrid) }}</span>
+                      <span v-if="item.customPrice" class="custom-price-marker">[{{ t('自') }}]</span>
+                      <span v-else-if="item.missingMarketPrice" class="missing-price-marker">[{{ t('缺') }}]</span>
                       <el-button
                         link
                         size="small"
@@ -601,11 +696,19 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                       />
                     </span>
                     <span>{{ materialCountText(row, index) }}</span>
-                    <span>
-                      {{ Format.money(item.unitPrice) }}
+                    <span class="material-price-editor">
+                      <el-input
+                        :model-value="materialInputValue(row.hrid, item.hrid, item.unitPrice)"
+                        size="small"
+                        inputmode="decimal"
+                        :aria-label="`${itemName(item.hrid)} ${t('自定义价格')}`"
+                        @input="onMaterialPriceInput(row.hrid, item.hrid, $event)"
+                        @blur="finishMaterialPriceInput(row.hrid, item.hrid)"
+                      />
                       <small class="block color-gray-400">{{ priceSourceLabel(item.priceSource, item.priceStatus) }}</small>
+                      <el-button v-if="item.customPrice" link size="small" @click="resetMaterialPrice(row.hrid, item.hrid)">{{ t('重置') }}</el-button>
                     </span>
-                    <span>{{ Format.money(item.subtotal) }}</span>
+                    <span>{{ item.unitPrice < 0 ? '—' : Format.money(item.subtotal) }}</span>
                     <span class="price-status-buttons">
                       <template v-for="option in materialPriceStatusOptions" :key="option.value">
                         <span v-if="option.value === 'CRAFT_ASK'" class="price-status-separator">丨</span>
@@ -624,7 +727,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                   </div>
                   <div class="flex justify-end items-center gap-3 mt-2 font-bold">
                     <span>{{ t('合计') }}</span>
-                    <span>{{ Format.money(row.craftBreakdown.total) }}</span>
+                    <span>{{ row.craftBreakdown.total < 0 ? '—' : Format.money(row.craftBreakdown.total) }}</span>
                   </div>
                   <div class="font-size-12px color-gray-500 mt-2">
                     {{ t('本成本只计算制作投入，不包含市场卖出税。') }}
@@ -633,6 +736,16 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
                 <el-empty v-else :description="t('该物品没有可计算的单步制造配方。')" :image-size="44" />
               </div>
             </el-popover>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('收购价')" align="right" width="130">
+          <template #default="{ row }">
+            {{ Format.price(getPriceOf(row.hrid, 0, PriceStatus.BID).ask) }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('自制价')" align="right" width="130">
+          <template #default="{ row }">
+            {{ Format.price(row.craftCost ?? -1) }}
           </template>
         </el-table-column>
         <el-table-column :label="t('催化剂')" align="center" width="70">
@@ -646,7 +759,8 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
         <el-table-column :label="t('买价')" align="right" width="150">
           <template #default="{ row }">
             <span class="flex items-center justify-end gap-1">
-              <el-tag v-if="row.useCraft" size="small" type="info">
+              <el-tag v-if="row.customBuyPrice" size="small" type="success">{{ t('自') }}</el-tag>
+              <el-tag v-else-if="row.useCraft" size="small" type="info">
                 {{ t('自制') }}
               </el-tag>
               {{ Format.price(row.buyPrice) }}
@@ -675,7 +789,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
             </el-tooltip>
           </template>
           <template #default="{ row }">
-            <span class="font-bold">{{ Format.price(row.costPerStone) }}</span>
+            <span class="font-bold">{{ row.stonesPerAction === 0 ? '—' : Format.price(row.costPerStone) }}</span>
           </template>
         </el-table-column>
         <el-table-column align="right" width="120">
@@ -695,7 +809,7 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
           <template #default="{ row }">
             <!-- 价差可为负，不能用 Format.price——负数会被当"无单"哨兵 -->
             <span :class="(stoneBidAfterTax - row.costPerStone) >= 0 ? 'color-green' : 'color-red'">
-              {{ stoneBidAfterTax >= 0 ? Format.money(stoneBidAfterTax - row.costPerStone) : "—" }}
+              {{ stoneBidAfterTax >= 0 && row.stonesPerAction > 0 ? Format.money(stoneBidAfterTax - row.costPerStone) : "—" }}
             </span>
           </template>
         </el-table-column>
@@ -820,6 +934,19 @@ watch(materialPriceStatusOverrides, () => compute(), { deep: true })
 .custom-price-marker {
   color: var(--el-color-success);
   font-weight: 700;
+}
+
+.missing-price-marker {
+  color: var(--el-color-danger);
+  font-weight: 700;
+}
+
+.material-price-editor :deep(.el-input) {
+  width: 100%;
+}
+
+.source-price-editor :deep(.el-input) {
+  width: 180px;
 }
 
 .cost-grid {

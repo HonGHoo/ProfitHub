@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import type { Action, ItemDetail } from "~/game"
 import ItemIcon from "@@/components/ItemIcon/index.vue"
-
 import * as Format from "@@/utils/format"
+
 import { Star, StarFilled } from "@element-plus/icons-vue"
 import { ElTable } from "element-plus"
 import { DecomposeCalculator } from "@/calculator/alchemy"
@@ -10,6 +10,7 @@ import { EnhanceCalculator } from "@/calculator/enhance"
 import { ManufactureCalculator } from "@/calculator/manufacture"
 import { getItemDetailOf, getMarketDataApi, getPriceOf, priceStepOf } from "@/common/apis/game"
 import { getEquipmentList } from "@/common/apis/player"
+import PriceInput from "@/common/components/PriceInput/index.vue"
 import { SELL_TAX_FACTOR, SELL_TAX_RATE } from "@/common/constants/market"
 import { useEnhancerStore } from "@/pinia/stores/enhancer"
 import { COIN_HRID } from "@/pinia/stores/game"
@@ -569,7 +570,7 @@ watch(menuVisible, (value) => {
             </el-table-column>
             <el-table-column min-width="120" align="center">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   class="max-w-100%"
                   v-model="row.price"
                   :min="-1"
@@ -654,7 +655,7 @@ watch(menuVisible, (value) => {
             </el-table-column>
             <el-table-column min-width="120" align="center">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   class="max-w-100%"
                   v-model="row.escapePrice"
                   :min="-1"
@@ -687,7 +688,7 @@ watch(menuVisible, (value) => {
             </el-table-column>
             <el-table-column min-width="120" align="center">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   class="max-w-100%"
                   v-model="row.whitePrice"
                   :min="-1"
@@ -811,7 +812,7 @@ watch(menuVisible, (value) => {
                 <div class="font-size-14px">
                   {{ t('工时费/h') }}
                 </div>
-                <el-input-number
+                <PriceInput
                   class="w-120px"
                   v-model="enhancerStore.advancedConfig.hourlyRate"
                   :step="1"
@@ -834,7 +835,7 @@ watch(menuVisible, (value) => {
                 <div class="font-size-14px whitespace-nowrap">
                   {{ t('价格') }}
                 </div>
-                <el-input-number
+                <PriceInput
                   class="w-full"
                   style="width: 100%"
                   v-model="currentItem.productPrice"
@@ -860,7 +861,7 @@ watch(menuVisible, (value) => {
                   </div>
                   <div>{{ Format.number(item.count * (item.rate || 1), 2) }}</div>
                 </div>
-                <el-input-number
+                <PriceInput
                   class="w-100px"
                   v-model="item.price"
                   :placeholder="Format.number(item.originPrice)"
@@ -879,7 +880,7 @@ watch(menuVisible, (value) => {
                   </div>
                   <div>{{ Format.number(item.count * (item.rate || 1), 2) }}</div>
                 </div>
-                <el-input-number
+                <PriceInput
                   class="w-100px"
                   v-model="item.price"
                   :placeholder="Format.number(item.originPrice)"
@@ -924,7 +925,7 @@ watch(menuVisible, (value) => {
             </el-table-column>
             <el-table-column :label="t('价格')" align="center" min-width="120">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   v-if="row.hrid !== COIN_HRID"
                   class="max-w-100%"
                   v-model="row.price"
@@ -959,7 +960,7 @@ watch(menuVisible, (value) => {
             </el-table-column>
             <el-table-column min-width="120" align="center">
               <template #default="{ row }">
-                <el-input-number
+                <PriceInput
                   class="max-w-100%"
                   v-model="row.protection.price"
                   :min="-1"

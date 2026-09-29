@@ -4,6 +4,7 @@ import ItemIcon from "@@/components/ItemIcon/index.vue"
 import * as Format from "@@/utils/format"
 import { getItemDetailOf, getPriceOf } from "@/common/apis/game"
 import { getManualPriceOf, setPriceApi } from "@/common/apis/price"
+import PriceInput from "@/common/components/PriceInput/index.vue"
 import { COIN_HRID } from "@/pinia/stores/game"
 
 const props = defineProps<{
@@ -121,7 +122,7 @@ const { t } = useI18n()
             <el-table-column :label="t('自定义价格')">
               <template #default="{ row }">
                 <el-checkbox style="margin-right: 10px;" v-show="row.hrid !== COIN_HRID" v-model="row.manual" />
-                <el-input-number v-show="row.manual" v-model="row.price" :controls="false" />
+                <PriceInput v-show="row.manual" v-model="row.price" />
               </template>
             </el-table-column>
           </el-table>
@@ -154,7 +155,7 @@ const { t } = useI18n()
             <el-table-column :label="t('自定义价格')">
               <template #default="{ row }">
                 <el-checkbox style="margin-right: 10px;" v-show="row.hrid !== COIN_HRID" v-model="row.manual" />
-                <el-input-number v-show="row.manual" v-model="row.price" :controls="false" />
+                <PriceInput v-show="row.manual" v-model="row.price" />
               </template>
             </el-table-column>
           </el-table>
