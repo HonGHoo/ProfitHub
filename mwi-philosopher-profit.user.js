@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         银河奶牛放置 - 贤者利润页签
 // @namespace    top.milkonomy.philosopher
-// @version      0.1.7
+// @version      0.1.8
 // @description  在游戏内加入贤者页签，按官方市场快照筛选正利润来源，并用打开市场后收到的实时盘口重算末步材料成本。
 // @author       Milkonomy
 // @match        https://www.milkywayidle.com/*
@@ -18,7 +18,7 @@
 (() => {
   "use strict";
 
-  const SCRIPT_VERSION = "0.1.7";
+  const SCRIPT_VERSION = "0.1.8";
   const STORAGE_KEY = "__milkonomy_philosopher_tab_v1__";
   const TAB_ATTRIBUTE = "data-milkonomy-philosopher-tab";
   const PANEL_ID = "milkonomy-philosopher-panel";
@@ -457,6 +457,10 @@
     }
 
     const rows = [];
+    const stoneBid = getPrice(STONE_HRID, 0, "bid");
+    const stoneNet = stoneBid > 0
+      ? stoneBid * (state.settings.includeTax ? TAX_FACTOR : 1)
+      : -1;
     for (const item of Object.values(runtime.gameData.itemDetailMap)) {
       if (!item?.isTradable || !item.alchemyDetail) continue;
       const alchemy = item.alchemyDetail;
@@ -472,6 +476,10 @@
       const craft = getFinalStepCraft(item.hrid);
       const useCraft = Boolean(state.settings.useCraftCost && craft && craft.total > 0);
       const sourceCost = useCraft ? craft.total : sourceMarket.price;
+      const ranks = Number(state.settings.catalystRank) === -1
+        ? [0, 1, 2]
+        : [Number(state.settings.catalystRank)];
+      const baseline = calculateBaselineCost(item, method, ranks, stoneNet);
       if (!(sourceCost > 0)) {
         rows.push({
           hrid: item.hrid,
@@ -482,15 +490,14 @@
           sourceCost: -1,
           useCraft: false,
           craft,
+          baselineCost: baseline?.price ?? null,
+          baselineRank: baseline?.rank ?? null,
           unpriced: true,
           profit: null
         });
         continue;
       }
 
-      const ranks = Number(state.settings.catalystRank) === -1
-        ? [0, 1, 2]
-        : [Number(state.settings.catalystRank)];
       let best = null;
       for (const rank of ranks) {
         const result = calculateStoneCost(item, method, rank, sourceCost);
@@ -499,10 +506,6 @@
       }
       if (!best) continue;
 
-      const stoneBid = getPrice(STONE_HRID, 0, "bid");
-      const stoneNet = stoneBid > 0
-        ? stoneBid * (state.settings.includeTax ? TAX_FACTOR : 1)
-        : -1;
       const profit = stoneNet > 0 ? stoneNet - best.costPerStone : -Infinity;
       rows.push({
         ...best,
@@ -514,6 +517,8 @@
         sourceCost,
         useCraft,
         craft,
+        baselineCost: baseline?.price ?? null,
+        baselineRank: baseline?.rank ?? null,
         stoneBid,
         profit,
         margin: best.costPerStone > 0 ? profit / best.costPerStone : -Infinity
@@ -521,6 +526,19 @@
     }
 
     runtime.rows = rows.sort((a, b) => Number(b.unpriced || false) - Number(a.unpriced || false) || (b.profit ?? -Infinity) - (a.profit ?? -Infinity));
+  }
+
+  function calculateBaselineCost(item, method, ranks, stoneNet) {
+    if (!(stoneNet > 0)) return null;
+    let best = null;
+    for (const rank of ranks) {
+      // 来源价设为 0，只保留成功率、回收、副产物及其他费用，再反解保本买价。
+      const result = calculateStoneCost(item, method, rank, 0);
+      if (!result || !(result.sourceCount > 0)) continue;
+      const price = (stoneNet * result.stonesPerAttempt + result.byproductIncome - result.coinCost - result.catalystCost) / result.sourceCount;
+      if (Number.isFinite(price) && (!best || price > best.price)) best = { price, rank };
+    }
+    return best;
   }
 
   function calculateStoneCost(item, method, rank, sourceCost) {
@@ -745,16 +763,16 @@
           <button type="button" data-action="close">关闭</button>
         </div>
         <div class="mpp-note">
-          API 快照用于全量初筛；点击图标会打开游戏市场，收到实时盘口后自动重算。利润 = 贤者石买一税后价 − 单颗净成本；不含茶水与时间成本。
+          API 快照用于全量初筛；点击图标会打开游戏市场，收到实时盘口后自动重算。基准成本是按贤者石买一税后价反推的来源物品保本买价；自动催化剂取保本价最高的方案。利润 = 贤者石买一税后价 − 单颗净成本；不含茶水与时间成本。
         </div>
         ${runtime.error ? `<div class="mpp-error">${escapeHtml(runtime.error)}</div>` : ""}
         <div class="mpp-table-wrap">
           <table class="mpp-table">
             <thead><tr>
-              <th>来源</th><th>方式</th><th>成功率</th><th>石/次</th><th>来源成本</th><th>副产物抵扣</th><th>单颗净成本</th><th>利润</th><th>成本收益率</th>
+              <th>来源</th><th>方式</th><th>成功率</th><th>石/次</th><th>来源成本</th><th title="按贤者石市价反推的每件来源物品保本买价">基准成本</th><th>副产物抵扣</th><th>单颗净成本</th><th>利润</th><th>成本收益率</th>
             </tr></thead>
             <tbody>
-              ${visibleRows.map(renderRow).join("") || `<tr><td colspan="9" class="mpp-empty">${runtime.loading ? escapeHtml(runtime.loadingStage || "正在读取数据…") : "当前设置下没有正利润项目"}</td></tr>`}
+              ${visibleRows.map(renderRow).join("") || `<tr><td colspan="10" class="mpp-empty">${runtime.loading ? escapeHtml(runtime.loadingStage || "正在读取数据…") : "当前设置下没有正利润项目"}</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -772,7 +790,7 @@
             <button type="button" class="mpp-name-button" data-toggle-row="${escapeHtml(row.hrid)}"><span>${expanded ? "▾" : "▸"}</span>${escapeHtml(row.name)}</button>
           </div></td>
           <td>${row.method === "transmute" ? "转化" : "分解"}</td>
-          <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+          <td>—</td><td>—</td><td>—</td><td title="保本买价；来源暂无报价，利润仍待核价">${formatBaselinePrice(row.baselineCost)}</td><td>—</td><td>—</td><td>—</td><td>—</td>
         </tr>
         ${expanded ? renderCraftRow(row) : ""}
       `;
@@ -796,6 +814,7 @@
         <td>${formatPercent(row.successRate)}</td>
         <td>${formatNumber(row.stonesPerAttempt, 4)}</td>
         <td title="${escapeHtml(sourcePriceTitle)}">${formatPrice(row.sourceCost)}${row.useCraft ? "<small class='mpp-tag'>自制</small>" : ""}</td>
+        <td title="按${row.baselineRank === 2 ? "至高" : row.baselineRank === 1 ? "普通" : "无"}催化剂计算的保本买价">${formatBaselinePrice(row.baselineCost)}</td>
         <td>${formatPrice(row.byproductIncome)}</td>
         <td><b>${formatPrice(row.costPerStone)}</b></td>
         <td class="${row.profit >= 0 ? "mpp-profit" : "mpp-loss"}"><b>${formatSignedPrice(row.profit)}</b></td>
@@ -807,11 +826,11 @@
 
   function renderCraftRow(row) {
     if (!row.craft) {
-      return `<tr class="mpp-detail-row"><td colspan="9"><div class="mpp-no-recipe">没有可计算的锻造/制造/裁缝末步配方；当前按来源市场价计算。</div></td></tr>`;
+      return `<tr class="mpp-detail-row"><td colspan="10"><div class="mpp-no-recipe">没有可计算的锻造/制造/裁缝末步配方；当前按来源市场价计算。</div></td></tr>`;
     }
     const actionName = row.craft.action === "cheesesmithing" ? "锻造" : row.craft.action === "tailoring" ? "裁缝" : "制造";
     return `
-      <tr class="mpp-detail-row"><td colspan="9">
+      <tr class="mpp-detail-row"><td colspan="10">
         <div class="mpp-detail-head"><b>${actionName}末步材料</b><span>工匠节省 ${formatPercent(row.craft.artisanRate)} · 合计 ${formatPrice(row.craft.total)}</span></div>
         <div class="mpp-materials">
           ${row.craft.materials.map(material => `
@@ -1088,6 +1107,11 @@
     return Math.round(value).toLocaleString();
   }
 
+  function formatBaselinePrice(value) {
+    if (!Number.isFinite(value)) return "—";
+    return value < 0 ? `−${formatPrice(-value)}` : formatPrice(value);
+  }
+
   function formatSignedPrice(value) {
     if (!Number.isFinite(value)) return "—";
     return `${value >= 0 ? "+" : "−"}${formatPrice(Math.abs(value))}`;
@@ -1168,7 +1192,7 @@
       #${PANEL_ID} .mpp-note { padding: 7px 18px; color: #8790b9; font-size: 12px; background: #131620; }
       #${PANEL_ID} .mpp-error { margin: 8px 18px 0; padding: 8px 10px; color: #ffc2c2; background: #47252b; border-radius: 5px; }
       #${PANEL_ID} .mpp-table-wrap { flex: 1; min-height: 0; max-height: calc(100dvh - 330px); overflow: auto; padding: 0 12px 18px; }
-      #${PANEL_ID} .mpp-table { width: 100%; min-width: 970px; border-collapse: collapse; font-size: 13px; }
+      #${PANEL_ID} .mpp-table { width: 100%; min-width: 1080px; border-collapse: collapse; font-size: 13px; }
       #${PANEL_ID} .mpp-table th { position: sticky; top: 0; z-index: 1; padding: 9px 8px; color: #9ca6d3; background: #191c29; border-bottom: 1px solid #343a55; text-align: right; white-space: nowrap; }
       #${PANEL_ID} .mpp-table th:first-child { text-align: left; }
       #${PANEL_ID} .mpp-table td { padding: 8px; border-bottom: 1px solid #262b3e; text-align: right; white-space: nowrap; }
