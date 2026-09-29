@@ -27,6 +27,7 @@ const { t } = useI18n()
 const catalystRank = useMemory("stone-catalyst-rank", -1)
 const includeTax = useMemory("stone-include-tax", true)
 const includeRare = useMemory("stone-include-rare", true)
+const craftMode = useMemory("stone-craft-mode", false)
 const stonePriceOverride = useMemory("stone-price-override", null as number | null)
 const fragmentProductPriceOverrides = useMemory("stone-fragment-product-price-overrides", {} as Record<string, number>)
 const materialPriceStatusOverrides = useMemory("stone-material-price-status-overrides", {} as Record<string, Record<string, MaterialPriceSelection>>, 0)
@@ -445,7 +446,7 @@ function compute() {
       catalystRank: catalystRank.value,
       sellTaxFactor: includeTax.value ? SELL_TAX_FACTOR : NO_TAX_FACTOR,
       includeRare: includeRare.value,
-      craftMode: true,
+      craftMode: craftMode.value,
       materialPriceStatusOverrides: cleanedOverrides,
       materialPriceOverrides: materialPriceOverrides.value,
       sourcePriceOverrides: sourcePriceOverrides.value
@@ -457,7 +458,7 @@ function compute() {
 }
 
 // 进页面即算；设置变化、市场数据刷新（约每小时/5 分钟轮询）、买卖价侧切换自动重算
-watch([catalystRank, includeTax, includeRare], compute, { immediate: true })
+watch([catalystRank, includeTax, includeRare, craftMode], compute, { immediate: true })
 watch(() => gameStore.marketData?.timestamp, () => compute())
 watch(() => [gameStore.buyStatus, gameStore.sellStatus], () => compute())
 watch(() => playerStore.config, () => compute(), { deep: true })
@@ -511,6 +512,7 @@ watch(sourcePriceOverrides, () => compute(), { deep: true })
         </div>
         <el-checkbox v-model="includeTax" :label="t('计税')" />
         <el-checkbox v-model="includeRare" :label="t('稀有掉落')" />
+        <el-checkbox v-model="craftMode" :label="t('买材料自制')" />
       </div>
       <div v-if="fragmentCraft" class="fragment-panel">
         <div class="fragment-panel-title">
