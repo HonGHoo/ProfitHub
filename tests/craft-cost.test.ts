@@ -59,6 +59,8 @@ describe("single-step manufacture cost", () => {
           unitPrice: 100,
           subtotal: 100,
           artisanApplied: false,
+          customPrice: false,
+          missingMarketPrice: false,
           priceSource: "market",
           priceStatus: "ASK"
         },
@@ -69,6 +71,8 @@ describe("single-step manufacture cost", () => {
           unitPrice: 20,
           subtotal: 180,
           artisanApplied: true,
+          customPrice: false,
+          missingMarketPrice: false,
           priceSource: "market",
           priceStatus: "ASK"
         }

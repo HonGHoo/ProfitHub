@@ -1,4 +1,9 @@
 export default {
+  "装备买价": "Equipment Buy Price",
+  "装备标准价": "Equipment Reference Price",
+  "贤者成本（单颗净成本）": "Stone Cost (Net per Stone)",
+  "差价": "Spread",
+  "装备标准价：贤者税后期望收入加副产物抵扣，减去催化剂等额外成本。": "Equipment reference price: expected stone proceeds after tax plus byproduct credits, minus catalyst and other extra costs.",
   // 系统提示
   "获取数据第{0}次失败，正在重试...": "Failed to get data count {0}, retrying...",
   "数据获取失败，直接使用缓存数据": "Failed to get data, using cached data directly",

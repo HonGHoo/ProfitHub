@@ -323,6 +323,7 @@ export interface StoneSourceRow {
   stonesPerAction: number
   /** 来源物品生效买价：市场卖单价，或自制成本（useCraft=true） */
   buyPrice: number
+  sourceCount: number
   /** true = 按自制成本计价（无卖单回退，或勾选自制比价后材料成本更低） */
   useCraft?: boolean
   customBuyPrice?: boolean
@@ -385,10 +386,10 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
     let buyPrice: number
     let useCraft = false
     const customBuyPrice = opts.sourcePriceOverrides?.[cand.hrid]
-    const hasCustomBuyPrice = typeof customBuyPrice === "number" && Number.isFinite(customBuyPrice) && customBuyPrice > 0
+    const hasCustomBuyPrice = typeof customBuyPrice === "number" && Number.isFinite(customBuyPrice) && customBuyPrice >= 0
     if (hasCustomBuyPrice) {
       buyPrice = customBuyPrice
-    } else if (opts.craftMode && craftCost > 0) {
+    } else if (opts.craftMode && craftBreakdown) {
       buyPrice = craftCost
       useCraft = true
     } else if (marketAsk >= 0) {
@@ -397,9 +398,9 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       buyPrice = craftCost > 0 ? craftCost : getCraftCostOf(cand.hrid)
       useCraft = buyPrice > 0
     }
-    if (!(buyPrice > 0)) {
+    if (!(buyPrice >= 0)) {
       excludedCount++
-      rows.push({ hrid: cand.hrid, method: cand.method, catalystRankUsed: 0, stonesPerAction: 0, buyPrice: -1, marketAsk, craftCost, craftBreakdown, byproductIncome: 0, costPerStone: -1 })
+      rows.push({ hrid: cand.hrid, method: cand.method, catalystRankUsed: 0, stonesPerAction: 0, sourceCount: 0, buyPrice: -1, marketAsk, craftCost, craftBreakdown, byproductIncome: 0, costPerStone: -1 })
       continue
     }
     const ranks = opts.catalystRank === -1 ? [0, 1, 2] : [opts.catalystRank]
@@ -426,7 +427,8 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const byproductIncome = calc.income * succ - stoneValuePerAttempt
       const costPerStone = (calc.cost - byproductIncome) / stonesPerAction
       if (!Number.isFinite(costPerStone)) continue
-      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, buyPrice, useCraft, customBuyPrice: hasCustomBuyPrice, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone }
+      const sourceCount = calc.ingredientListWithPrice.find(item => item.hrid === cand.hrid)?.count ?? 0
+      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, sourceCount, buyPrice, useCraft, customBuyPrice: hasCustomBuyPrice, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone }
       if (!best || row.costPerStone < best.costPerStone) best = row
     }
     if (best) rows.push(best)
