@@ -416,10 +416,9 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       continue
     }
     const ranks = opts.catalystRank === -1 ? [0, 1, 2] : [opts.catalystRank]
-    // 自制计价时把生效价锁进计算器（immutable 优先级最高，覆盖台账/市场价）
-    const ingredientPriceConfigList = useCraft || hasCustomBuyPrice
-      ? [{ hrid: cand.hrid, immutable: true, price: buyPrice }]
-      : []
+    // 所有模式都锁定表中生效买价：跨强化等级取价和无单自制回退也必须
+    // 传入计算器，避免其重新读取 +0 报价或全局台账导致显示与成本不一致。
+    const ingredientPriceConfigList = [{ hrid: cand.hrid, immutable: true, price: buyPrice }]
     let best: StoneSourceRow | null = null
     for (const rank of ranks) {
       const calc = cand.method === "transmute"
