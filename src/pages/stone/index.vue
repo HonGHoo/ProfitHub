@@ -21,6 +21,7 @@ import ActionConfig from "../dashboard/components/ActionConfig.vue"
 import GameInfo from "../dashboard/components/GameInfo.vue"
 import PriceStatusSelect from "../dashboard/components/PriceStatusSelect.vue"
 import JewelryWageDialog from "./JewelryWageDialog.vue"
+import StoneCostFormula from "./StoneCostFormula.vue"
 
 const { t } = useI18n()
 
@@ -70,6 +71,7 @@ const stonePriceInput = ref("")
 const productPriceInputs = ref<Record<string, string>>({})
 const hoveredCostHrid = ref<string | null>(null)
 const pinnedCostHrid = ref<string | null>(null)
+const formulaVisibleHrids = ref<Set<string>>(new Set())
 let costHideTimer: ReturnType<typeof setTimeout> | undefined
 
 // 价差口径（利润）：卖出一颗贤者之石的税后到手价 − 单颗净成本。
@@ -353,6 +355,11 @@ function closeCostPopover(hrid: string) {
 
 function isCostPopoverVisible(hrid: string) {
   return hoveredCostHrid.value === hrid || pinnedCostHrid.value === hrid
+}
+
+function toggleCostFormula(hrid: string) {
+  if (formulaVisibleHrids.value.has(hrid)) formulaVisibleHrids.value.delete(hrid)
+  else formulaVisibleHrids.value.add(hrid)
 }
 
 function actionLabel(action: string) {
@@ -728,15 +735,19 @@ watch(sourcePriceOverrides, () => compute(), { deep: true })
                       <el-button v-if="item.customPrice" link size="small" @click="resetMaterialPrice(row.hrid, item.hrid)">{{ t('重置') }}</el-button>
                     </span>
                   </div>
-                  <div class="flex justify-end items-center gap-3 mt-2 font-bold">
-                    <span>{{ t('合计') }}</span>
-                    <span>{{ row.craftBreakdown.total < 0 ? '—' : Format.money(row.craftBreakdown.total) }}</span>
-                  </div>
-                  <div class="font-size-12px color-gray-500 mt-2">
-                    {{ t('本成本只计算制作投入，不包含市场卖出税。') }}
-                  </div>
                 </template>
                 <el-empty v-else :description="t('该物品没有可计算的单步制造配方。')" :image-size="44" />
+                <div class="cost-popover-footer" :class="{ 'has-formula': formulaVisibleHrids.has(row.hrid) }">
+                  <div class="cost-summary">
+                    <div v-if="row.craftBreakdown" class="font-bold">
+                      {{ t('合计') }} {{ row.craftBreakdown.total < 0 ? '—' : Format.money(row.craftBreakdown.total) }}
+                    </div>
+                    <el-button size="small" :aria-expanded="formulaVisibleHrids.has(row.hrid)" @click="toggleCostFormula(row.hrid)">
+                      {{ t(formulaVisibleHrids.has(row.hrid) ? '隐藏公式' : '显示公式') }}
+                    </el-button>
+                  </div>
+                  <StoneCostFormula v-if="formulaVisibleHrids.has(row.hrid)" :row="row" />
+                </div>
               </div>
             </el-popover>
           </template>
@@ -808,6 +819,8 @@ watch(sourcePriceOverrides, () => compute(), { deep: true })
 .cost-popover {
   position: relative;
   width: 100%;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
@@ -822,6 +835,31 @@ watch(sourcePriceOverrides, () => compute(), { deep: true })
   position: absolute;
   top: -4px;
   right: -4px;
+}
+
+.cost-popover-footer {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.cost-popover-footer.has-formula {
+  grid-template-columns: minmax(150px, 1fr) minmax(0, 2fr);
+  align-items: start;
+}
+
+.cost-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .cost-popover-footer.has-formula {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stone-price-editor,

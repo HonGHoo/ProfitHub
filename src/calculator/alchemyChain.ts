@@ -314,6 +314,16 @@ function transmuteStepEV(hrid: string, opts: ChainOptions, entryCache: Map<strin
 /** 贤者之石 hrid */
 export const STONE_HRID = "/items/philosophers_stone"
 
+export interface StoneActionCostBreakdown {
+  successRate: number
+  sellTaxFactor: number
+  inputs: { hrid: string, count: number, unitPrice: number, subtotal: number }[]
+  byproducts: { hrid: string, count: number, rate: number, expectedCount: number, unitPrice: number, taxFactor: number, subtotal: number }[]
+  stoneCount: number
+  stoneDropRate: number
+  totalCost: number
+}
+
 export interface StoneSourceRow {
   hrid: string
   method: "transmute" | "decompose"
@@ -337,6 +347,8 @@ export interface StoneSourceRow {
   byproductIncome: number
   /** 单颗贤者之石净成本 =（买价+催化剂 − 副产物抵扣）÷ 期望石头数 */
   costPerStone: number
+  /** 与排行榜同一次计算的炼金投入与期望产出，供公式展开使用。 */
+  actionBreakdown?: StoneActionCostBreakdown
 }
 
 export interface StoneLeaderboardResult {
@@ -428,7 +440,21 @@ export function computeStoneLeaderboard(opts: { catalystRank: number, sellTaxFac
       const costPerStone = (calc.cost - byproductIncome) / stonesPerAction
       if (!Number.isFinite(costPerStone)) continue
       const sourceCount = calc.ingredientListWithPrice.find(item => item.hrid === cand.hrid)?.count ?? 0
-      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, sourceCount, buyPrice, useCraft, customBuyPrice: hasCustomBuyPrice, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone }
+      const actionBreakdown: StoneActionCostBreakdown = {
+        successRate: succ,
+        sellTaxFactor: opts.sellTaxFactor,
+        inputs: calc.ingredientListWithPrice.map(item => ({ hrid: item.hrid, count: item.count, unitPrice: item.price, subtotal: item.count * item.price })),
+        byproducts: calc.productListWithPrice.filter(item => item.hrid !== STONE_HRID).map((item) => {
+          const rate = item.rate || 1
+          const expectedCount = item.count * rate * succ
+          const taxFactor = item.hrid === COIN_HRID ? 1 : opts.sellTaxFactor
+          return { hrid: item.hrid, count: item.count, rate, expectedCount, unitPrice: item.price, taxFactor, subtotal: expectedCount * item.price * taxFactor }
+        }),
+        stoneCount: stoneEntry.count,
+        stoneDropRate: stoneEntry.rate ?? 1,
+        totalCost: calc.cost
+      }
+      const row: StoneSourceRow = { hrid: cand.hrid, method: cand.method, catalystRankUsed: rank, stonesPerAction, sourceCount, buyPrice, useCraft, customBuyPrice: hasCustomBuyPrice, marketAsk, craftCost, craftBreakdown, byproductIncome, costPerStone, actionBreakdown }
       if (!best || row.costPerStone < best.costPerStone) best = row
     }
     if (best) rows.push(best)
